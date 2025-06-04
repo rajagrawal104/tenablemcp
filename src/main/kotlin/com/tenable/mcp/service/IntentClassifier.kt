@@ -6,9 +6,11 @@ import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.time.Duration
 import java.time.DayOfWeek
-import com.tenable.mcp.controller.ConversationContext
-import com.tenable.mcp.model.ConversationContext as ModelConversationContext
+import com.tenable.mcp.model.ConversationContext
 import com.tenable.mcp.model.Intent
+import com.tenable.mcp.model.Action
+import com.tenable.mcp.model.Severity
+import com.tenable.mcp.model.TimeRange
 
 // Data class representing the extracted intent from a user prompt
 data class Intent(
@@ -32,85 +34,6 @@ data class Intent(
 )
 
 // Enum defining possible actions that can be performed
-enum class Action {
-    // Vulnerability Management
-    LIST_VULNERABILITIES,  // List vulnerabilities matching criteria
-    GET_VULNERABILITY,     // Get details of a specific vulnerability
-    EXPORT_VULNERABILITIES, // Export vulnerabilities to a report
-    
-    // Asset Management
-    LIST_ASSETS,          // List assets matching criteria
-    GET_ASSET,            // Get details of a specific asset
-    EXPORT_ASSETS,        // Export assets to a report
-    
-    // Scan Management
-    LIST_SCANS,           // List scans matching criteria
-    GET_SCAN,             // Get details of a specific scan
-    CREATE_SCAN,          // Create a new scan
-    LAUNCH_SCAN,          // Launch a scan
-    GET_SCAN_STATUS,      // Get status of a scan
-    
-    // Web App Scanning
-    LIST_WEB_APPS,        // List web apps matching criteria
-    GET_WEB_APP,          // Get details of a specific web app
-    CREATE_WEB_APP_SCAN,  // Create a new web app scan
-    GET_WEB_APP_SCAN_STATUS, // Get status of a web app scan
-    
-    // Container Security
-    LIST_CONTAINERS,      // List containers matching criteria
-    GET_CONTAINER,        // Get details of a specific container
-    GET_CONTAINER_VULNERABILITIES, // Get vulnerabilities in a container
-    
-    // Cloud Security
-    LIST_CLOUD_ACCOUNTS,  // List cloud accounts matching criteria
-    GET_CLOUD_ACCOUNT,    // Get details of a specific cloud account
-    GET_CLOUD_VULNERABILITIES, // Get vulnerabilities in a cloud account
-    
-    // Report Management
-    LIST_REPORTS,         // List reports matching criteria
-    GET_REPORT,           // Get details of a specific report
-    CREATE_REPORT,        // Create a new report
-    GET_REPORT_STATUS,    // Get status of a report
-    DOWNLOAD_REPORT,      // Download a report
-    
-    // Policy Management
-    LIST_POLICIES,        // List policies matching criteria
-    GET_POLICY,           // Get details of a specific policy
-    CREATE_POLICY,        // Create a new policy
-    UPDATE_POLICY,        // Update an existing policy
-    
-    // Tag Management
-    LIST_TAGS,            // List tags matching criteria
-    CREATE_TAG,           // Create a new tag
-    UPDATE_TAG,           // Update an existing tag
-    DELETE_TAG,           // Delete a tag
-    
-    // User Management
-    LIST_USERS,           // List users matching criteria
-    GET_USER,             // Get details of a specific user
-    CREATE_USER,          // Create a new user
-    UPDATE_USER,          // Update an existing user
-    
-    // Group Management
-    LIST_GROUPS,          // List groups matching criteria
-    GET_GROUP,            // Get details of a specific group
-    CREATE_GROUP,         // Create a new group
-    UPDATE_GROUP,         // Update an existing group
-    
-    // Access Control
-    LIST_PERMISSIONS,     // List permissions matching criteria
-    GET_PERMISSION,       // Get details of a specific permission
-    CREATE_PERMISSION,    // Create a new permission
-    UPDATE_PERMISSION,    // Update an existing permission
-    
-    // System Status
-    GET_SYSTEM_STATUS,    // Get system status
-    GET_API_STATUS,       // Get API status
-    
-    UNKNOWN              // Unable to determine the action
-}
-
-// Enum defining possible sub-actions for more specific operations
 enum class SubAction {
     CREATE,     // Create a new resource
     UPDATE,     // Update an existing resource
@@ -120,20 +43,6 @@ enum class SubAction {
     LAUNCH,     // Launch a scan
     STATUS      // Get status
 }
-
-// Enum defining severity levels for vulnerabilities
-enum class Severity {
-    CRITICAL,  // Critical severity issues
-    HIGH,      // High severity issues
-    MEDIUM,    // Medium severity issues
-    LOW        // Low severity issues
-}
-
-// Data class representing a time range with start and end times
-data class TimeRange(
-    val start: LocalDateTime,  // Start of the time range
-    val end: LocalDateTime     // End of the time range
-)
 
 @Service
 class IntentClassifier {
@@ -165,7 +74,7 @@ class IntentClassifier {
      * @param context Optional conversation context
      * @return Intent object containing the extracted action and parameters
      */
-    fun classifyIntent(prompt: String, context: ModelConversationContext? = null): Intent {
+    fun classifyIntent(prompt: String, context: ConversationContext? = null): Intent {
         val lowerPrompt = prompt.lowercase()
         
         // Determine the action
@@ -193,81 +102,85 @@ class IntentClassifier {
      * @param context Optional conversation context
      * @return The determined Action
      */
-    private fun determineAction(prompt: String, context: ModelConversationContext?): Action {
+    private fun determineAction(prompt: String, context: ConversationContext?): Action {
         val lowerPrompt = prompt.lowercase()
         
         // Scan-related patterns
         val scanPatterns = mapOf(
-            "list.*scan" to "list_scans",
-            "show.*scan" to "list_scans",
-            "get.*scan" to "list_scans",
-            "display.*scan" to "list_scans",
-            "view.*scan" to "list_scans",
-            "scan.*list" to "list_scans",
-            "scan.*history" to "list_scans",
-            "scan.*schedule" to "list_scans",
-            "scheduled.*scan" to "list_scans",
-            "historical.*scan" to "list_scans",
-            "past.*scan" to "list_scans",
-            "previous.*scan" to "list_scans",
-            "recent.*scan" to "list_scans",
-            "last.*scan" to "list_scans",
-            "all.*scan" to "list_scans",
-            "scan.*status" to "list_scans",
-            "scan.*result" to "list_scans",
-            "scan.*report" to "list_scans"
+            "list.*scan" to Action.LIST_SCANS,
+            "show.*scan" to Action.LIST_SCANS,
+            "get.*scan" to Action.LIST_SCANS,
+            "display.*scan" to Action.LIST_SCANS,
+            "view.*scan" to Action.LIST_SCANS,
+            "scan.*list" to Action.LIST_SCANS,
+            "scan.*history" to Action.LIST_SCANS,
+            "scan.*schedule" to Action.LIST_SCANS,
+            "scheduled.*scan" to Action.LIST_SCANS,
+            "historical.*scan" to Action.LIST_SCANS,
+            "past.*scan" to Action.LIST_SCANS,
+            "previous.*scan" to Action.LIST_SCANS,
+            "recent.*scan" to Action.LIST_SCANS,
+            "last.*scan" to Action.LIST_SCANS,
+            "all.*scan" to Action.LIST_SCANS,
+            "scan.*status" to Action.LIST_SCANS,
+            "scan.*result" to Action.LIST_SCANS,
+            "scan.*report" to Action.LIST_SCANS
         )
 
         // Check for scan-related patterns first
         for ((pattern, action) in scanPatterns) {
             if (prompt.matches(Regex(pattern, RegexOption.IGNORE_CASE))) {
-                return Action.valueOf(action)
+                return action
             }
         }
 
         // Asset-related patterns
         val assetPatterns = mapOf(
-            "list.*asset" to "list_assets",
-            "show.*asset" to "list_assets",
-            "get.*asset" to "list_assets",
-            "display.*asset" to "list_assets",
-            "view.*asset" to "list_assets",
-            "asset.*list" to "list_assets",
-            "all.*asset" to "list_assets"
+            "list.*asset" to Action.LIST_ASSETS,
+            "show.*asset" to Action.LIST_ASSETS,
+            "get.*asset" to Action.LIST_ASSETS,
+            "display.*asset" to Action.LIST_ASSETS,
+            "view.*asset" to Action.LIST_ASSETS,
+            "asset.*list" to Action.LIST_ASSETS,
+            "all.*asset" to Action.LIST_ASSETS
         )
 
         // Check for asset-related patterns
         for ((pattern, action) in assetPatterns) {
             if (prompt.matches(Regex(pattern, RegexOption.IGNORE_CASE))) {
-                return Action.valueOf(action)
+                return action
             }
         }
 
         // Vulnerability-related patterns
         val vulnPatterns = mapOf(
-            "list.*vulnerability" to "list_vulnerabilities",
-            "show.*vulnerability" to "list_vulnerabilities",
-            "get.*vulnerability" to "list_vulnerabilities",
-            "display.*vulnerability" to "list_vulnerabilities",
-            "view.*vulnerability" to "list_vulnerabilities",
-            "vulnerability.*list" to "list_vulnerabilities",
-            "all.*vulnerability" to "list_vulnerabilities",
-            "vuln.*list" to "list_vulnerabilities",
-            "show.*vuln" to "list_vulnerabilities",
-            "list.*vuln" to "list_vulnerabilities"
+            "list.*vulnerability" to Action.LIST_VULNERABILITIES,
+            "show.*vulnerability" to Action.LIST_VULNERABILITIES,
+            "get.*vulnerability" to Action.LIST_VULNERABILITIES,
+            "display.*vulnerability" to Action.LIST_VULNERABILITIES,
+            "view.*vulnerability" to Action.LIST_VULNERABILITIES,
+            "vulnerability.*list" to Action.LIST_VULNERABILITIES,
+            "all.*vulnerability" to Action.LIST_VULNERABILITIES,
+            "vuln.*list" to Action.LIST_VULNERABILITIES,
+            "show.*vuln" to Action.LIST_VULNERABILITIES,
+            "list.*vuln" to Action.LIST_VULNERABILITIES
         )
 
         // Check for vulnerability-related patterns
         for ((pattern, action) in vulnPatterns) {
             if (prompt.matches(Regex(pattern, RegexOption.IGNORE_CASE))) {
-                return Action.valueOf(action)
+                return action
             }
         }
 
         // Check context for previous action
         context?.currentContext?.get("lastAction")?.let { lastAction ->
             if (lastAction is String && lastAction.startsWith("list_")) {
-                return Action.valueOf(lastAction)
+                return try {
+                    Action.valueOf(lastAction.uppercase())
+                } catch (e: IllegalArgumentException) {
+                    Action.LIST_VULNERABILITIES
+                }
             }
         }
 
@@ -281,7 +194,7 @@ class IntentClassifier {
      * @param context Optional conversation context
      * @return The determined Severity, or null if not specified
      */
-    private fun determineSeverity(prompt: String, context: ModelConversationContext? = null): Severity? {
+    private fun determineSeverity(prompt: String, context: ConversationContext? = null): Severity? {
         val lowerPrompt = prompt.lowercase()
 
         // Check for explicit severity mentions
@@ -315,7 +228,7 @@ class IntentClassifier {
      * @param context Optional conversation context
      * @return The determined TimeRange, or null if not specified
      */
-    private fun determineTimeRange(prompt: String, context: ModelConversationContext? = null): TimeRange? {
+    private fun determineTimeRange(prompt: String, context: ConversationContext? = null): TimeRange? {
         val lowerPrompt = prompt.lowercase()
 
         // Check for explicit time mentions
