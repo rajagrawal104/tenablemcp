@@ -88,16 +88,32 @@
                 <div class="mt-6">
                     <h3 class="text-lg font-medium text-gray-900">Response</h3>
                     <div id="responseContainer" class="mt-2 space-y-4">
-                        <!-- Data Table Section -->
-                        <div id="dataTable" class="overflow-x-auto"></div>
-
-                        <!-- Visualization Section -->
-                        <div id="visualization" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="bg-white p-4 rounded-lg shadow">
-                                <canvas id="trendChart"></canvas>
+                        <!-- Loading State -->
+                        <div id="loadingState" class="hidden">
+                            <div class="flex items-center space-x-2">
+                                <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+                                <span class="text-gray-600">Processing your request...</span>
                             </div>
-                            <div class="bg-white p-4 rounded-lg shadow">
-                                <canvas id="severityChart"></canvas>
+                            <div class="mt-2">
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div id="loadingProgress" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Response Content -->
+                        <div id="responseContent" class="space-y-4">
+                            <!-- Data Table Section -->
+                            <div id="dataTable" class="overflow-x-auto"></div>
+
+                            <!-- Visualization Section -->
+                            <div id="visualization" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="bg-white p-4 rounded-lg shadow">
+                                    <canvas id="trendChart"></canvas>
+                                </div>
+                                <div class="bg-white p-4 rounded-lg shadow">
+                                    <canvas id="severityChart"></canvas>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -275,7 +291,45 @@
             conversationHistory.push({ role, content });
         }
 
-        // Function to ask a question
+        // Add these new functions for dynamic loading
+        function showLoadingState() {
+            const loadingState = document.getElementById('loadingState');
+            const responseContent = document.getElementById('responseContent');
+            if (loadingState) loadingState.classList.remove('hidden');
+            if (responseContent) responseContent.classList.add('hidden');
+            updateLoadingProgress(0);
+        }
+
+        function hideLoadingState() {
+            const loadingState = document.getElementById('loadingState');
+            const responseContent = document.getElementById('responseContent');
+            if (loadingState) loadingState.classList.add('hidden');
+            if (responseContent) responseContent.classList.remove('hidden');
+        }
+
+        function updateLoadingProgress(progress) {
+            const progressBar = document.getElementById('loadingProgress');
+            if (progressBar) {
+                progressBar.style.width = `${progress}%`;
+            }
+        }
+
+        function streamResponse(data, container) {
+            return new Promise((resolve) => {
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += 5;
+                    updateLoadingProgress(Math.min(progress, 90));
+                    
+                    if (progress >= 90) {
+                        clearInterval(interval);
+                        resolve();
+                    }
+                }, 100);
+            });
+        }
+
+        // Update the askQuestion function to use streaming
         async function askQuestion() {
             const queryInput = document.getElementById('queryInput');
             const query = queryInput.value.trim();
@@ -286,11 +340,7 @@
             queryInput.value = '';
 
             // Show loading state
-            const responseContainer = document.getElementById('responseContainer');
-            if (responseContainer) {
-                responseContainer.innerHTML = '<div class="text-gray-500 p-4">Processing your request...</div>';
-                responseContainer.style.display = 'block';
-            }
+            showLoadingState();
 
             try {
                 const response = await fetch('/ask', {
@@ -312,8 +362,11 @@
                 }
 
                 const data = await response.json();
-                console.log('Full backend response:', data); // Debug log
-                
+                console.log('Full backend response:', data);
+
+                // Stream the response
+                await streamResponse(data, document.getElementById('responseContainer'));
+
                 // Update context
                 currentContext = {
                     lastAction: data.action,
@@ -325,12 +378,6 @@
 
                 // Clear previous visualizations
                 clearVisualizations();
-
-                // Always clear and show the response container
-                if (responseContainer) {
-                    responseContainer.innerHTML = '';
-                    responseContainer.style.display = 'block';
-                }
 
                 // Handle the response based on the action
                 if (data.rawResponse) {
@@ -354,7 +401,7 @@
                         return null;
                     }
                     let displayData = findFirstArrayOfObjects(data.rawResponse);
-                    console.log('Display data (generic):', displayData); // Debug log
+                    console.log('Display data (generic):', displayData);
 
                     // Always clear and show the dataTable
                     if (dataTable) {
@@ -370,32 +417,45 @@
                             pre.textContent = JSON.stringify(data.rawResponse, null, 2);
                             dataTable.appendChild(pre);
                         }
+                        updateLoadingProgress(100);
+                        hideLoadingState();
                         return;
                     }
 
-                    // Always try to show the data table first
-                    if (dataTable) {
-                        try {
-                            createDataTable(displayData);
-                        } catch (tableError) {
-                            console.error('Error creating table:', tableError);
-                            dataTable.innerHTML = '<div class="text-red-500 p-4 bg-red-50 rounded-md">Error displaying data table</div>';
+                    // Stream the table creation
+                    const streamTable = async () => {
+                        if (dataTable) {
+                            try {
+                                await createDataTable(displayData);
+                                console.log('Table should be visible now');
+                            } catch (tableError) {
+                                console.error('Error creating table:', tableError);
+                                dataTable.innerHTML = '<div class="text-red-500 p-4 bg-red-50 rounded-md">Error displaying data table</div>';
+                            }
                         }
-                    }
+                    };
 
-                    // Try to show visualizations if available
-                    if (visualization && displayData.length > 0) {
-                        try {
-                            createVisualizations(displayData);
-                            visualization.style.display = 'grid';
-                        } catch (vizError) {
-                            console.error('Error creating visualizations:', vizError);
-                            visualization.innerHTML = '<div class="text-red-500 p-4 bg-red-50 rounded-md">Error creating visualizations</div>';
-                            visualization.style.display = 'block';
+                    // Stream the visualizations
+                    const streamVisualizations = async () => {
+                        if (visualization && displayData.length > 0) {
+                            try {
+                                await createVisualizations(displayData);
+                                visualization.style.display = 'grid';
+                            } catch (vizError) {
+                                console.error('Error creating visualizations:', vizError);
+                                visualization.innerHTML = '<div class="text-red-500 p-4 bg-red-50 rounded-md">Error creating visualizations</div>';
+                                visualization.style.display = 'block';
+                            }
+                        } else if (visualization) {
+                            visualization.style.display = 'none';
                         }
-                    } else if (visualization) {
-                        visualization.style.display = 'none';
-                    }
+                    };
+
+                    // Execute streaming operations
+                    await Promise.all([
+                        streamTable(),
+                        streamVisualizations()
+                    ]);
 
                     // Show download button if CSV was requested
                     if (query.toLowerCase().includes('csv') && displayData.length > 0) {
@@ -403,13 +463,19 @@
                         downloadButton.className = 'mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600';
                         downloadButton.textContent = 'Download CSV';
                         downloadButton.onclick = () => exportToCSV(displayData);
-                        responseContainer.appendChild(downloadButton);
+                        document.getElementById('responseContainer').appendChild(downloadButton);
                     }
+
+                    updateLoadingProgress(100);
+                    hideLoadingState();
                 } else {
                     // If no raw response, show a message
+                    const responseContainer = document.getElementById('responseContainer');
                     if (responseContainer) {
                         responseContainer.innerHTML = '<div class="text-gray-700 p-4">No data available to display.</div>';
                     }
+                    updateLoadingProgress(100);
+                    hideLoadingState();
                 }
             } catch (error) {
                 console.error('Error:', error);
@@ -426,10 +492,12 @@
                 }
 
                 addMessageToConversation('assistant', errorMessage);
+                const responseContainer = document.getElementById('responseContainer');
                 if (responseContainer) {
                     responseContainer.innerHTML = `<div class="text-red-500 p-4 bg-red-50 rounded-md">${errorMessage}</div>`;
-                    responseContainer.style.display = 'block';
                 }
+                updateLoadingProgress(100);
+                hideLoadingState();
             }
         }
 
@@ -569,12 +637,16 @@
         }
 
         function createDataTable(data) {
+            console.log('createDataTable called with data:', data); // Debug log
+
             if (!data || !Array.isArray(data) || data.length === 0) {
+                console.error('Invalid data for table:', data);
                 throw new Error('No data available to display');
             }
 
             const tableContainer = document.getElementById('dataTable');
             if (!tableContainer) {
+                console.error('Data table container not found');
                 throw new Error('Data table container not found');
             }
 
@@ -584,6 +656,10 @@
             const maxRows = 50;
             const limitedData = data.slice(0, maxRows);
 
+            // Create table wrapper for better visibility
+            const tableWrapper = document.createElement('div');
+            tableWrapper.className = 'overflow-x-auto border border-gray-200 rounded-lg';
+            
             const table = document.createElement('table');
             table.className = 'min-w-full divide-y divide-gray-200';
 
@@ -601,11 +677,13 @@
             });
 
             if (allKeys.size === 0) {
+                console.error('No valid data fields found');
                 throw new Error('No valid data fields found');
             }
 
             // Sort keys for consistent display
             const sortedKeys = Array.from(allKeys).sort();
+            console.log('Table columns:', sortedKeys); // Debug log
 
             // Create header cells
             sortedKeys.forEach(key => {
@@ -621,11 +699,14 @@
             const tbody = document.createElement('tbody');
             tbody.className = 'bg-white divide-y divide-gray-200';
             
-            limitedData.forEach(item => {
-                if (!item || typeof item !== 'object') return;
+            limitedData.forEach((item, index) => {
+                if (!item || typeof item !== 'object') {
+                    console.warn('Invalid item at index', index, item);
+                    return;
+                }
                 
                 const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50';
+                row.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
                 
                 sortedKeys.forEach(key => {
                     const td = document.createElement('td');
@@ -647,10 +728,11 @@
                 tbody.appendChild(row);
             });
             table.appendChild(tbody);
+            tableWrapper.appendChild(table);
 
             // Clear and update the container
             tableContainer.innerHTML = '';
-            tableContainer.appendChild(table);
+            tableContainer.appendChild(tableWrapper);
             tableContainer.style.display = 'block';
 
             // Show a message if not all rows are displayed
@@ -660,6 +742,8 @@
                 info.textContent = `Showing first ${maxRows} of ${data.length} results. Please refine your query for more specific results.`;
                 tableContainer.appendChild(info);
             }
+
+            console.log('Table created successfully'); // Debug log
         }
 
         function exportToCSV(data) {
