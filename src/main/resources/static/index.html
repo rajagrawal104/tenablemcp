@@ -459,11 +459,28 @@
 
                     // Show download button if CSV was requested
                     if (query.toLowerCase().includes('csv') && displayData.length > 0) {
+                        const downloadSection = document.createElement('div');
+                        downloadSection.className = 'mt-4 p-4 bg-gray-50 rounded-lg';
+                        
+                        const downloadInfo = document.createElement('p');
+                        downloadInfo.className = 'text-sm text-gray-600 mb-2';
+                        downloadInfo.textContent = `Found ${displayData.length} records. Click below to download as CSV.`;
+                        
                         const downloadButton = document.createElement('button');
-                        downloadButton.className = 'mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600';
-                        downloadButton.textContent = 'Download CSV';
-                        downloadButton.onclick = () => exportToCSV(displayData);
-                        document.getElementById('responseContainer').appendChild(downloadButton);
+                        downloadButton.className = 'px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors';
+                        downloadButton.innerHTML = '<i class="fas fa-download mr-2"></i>Download CSV';
+                        downloadButton.onclick = () => {
+                            try {
+                                exportToCSV(displayData);
+                            } catch (error) {
+                                console.error('Error in CSV export:', error);
+                                alert('Error exporting to CSV. Please try again.');
+                            }
+                        };
+                        
+                        downloadSection.appendChild(downloadInfo);
+                        downloadSection.appendChild(downloadButton);
+                        document.getElementById('responseContainer').appendChild(downloadSection);
                     }
 
                     updateLoadingProgress(100);
@@ -747,24 +764,84 @@
         }
 
         function exportToCSV(data) {
-            if (!data || !Array.isArray(data) || data.length === 0) return;
+            if (!data || !Array.isArray(data) || data.length === 0) {
+                console.error('Invalid data for CSV export:', data);
+                return;
+            }
 
-            const headers = Object.keys(data[0]);
-            const csvContent = [
-                headers.join(','),
-                ...data.map(row => 
-                    headers.map(header => {
-                        const value = row[header]?.toString() || '';
-                        return `"${value.replace(/"/g, '""')}"`;
-                    }).join(',')
-                )
-            ].join('\n');
+            try {
+                // Flatten nested objects and arrays
+                const flattenedData = data.map(item => {
+                    const flattened = {};
+                    const flatten = (obj, prefix = '') => {
+                        for (const key in obj) {
+                            if (obj.hasOwnProperty(key)) {
+                                const value = obj[key];
+                                const newKey = prefix ? `${prefix}_${key}` : key;
+                                
+                                if (value === null || value === undefined) {
+                                    flattened[newKey] = '';
+                                } else if (typeof value === 'object') {
+                                    if (Array.isArray(value)) {
+                                        flattened[newKey] = value.join('; ');
+                                    } else {
+                                        flatten(value, newKey);
+                                    }
+                                } else {
+                                    flattened[newKey] = value;
+                                }
+                            }
+                        }
+                    };
+                    flatten(item);
+                    return flattened;
+                });
 
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'export.csv';
-            link.click();
+                // Get all unique headers
+                const headers = new Set();
+                flattenedData.forEach(item => {
+                    Object.keys(item).forEach(key => headers.add(key));
+                });
+
+                // Convert headers to array and sort them
+                const headerArray = Array.from(headers).sort();
+
+                // Create CSV content
+                const csvContent = [
+                    headerArray.join(','),
+                    ...flattenedData.map(row => 
+                        headerArray.map(header => {
+                            const value = row[header];
+                            // Handle special characters and formatting
+                            if (value === null || value === undefined) {
+                                return '""';
+                            }
+                            const stringValue = String(value);
+                            // Escape quotes and wrap in quotes if contains special characters
+                            const needsQuotes = stringValue.includes(',') || 
+                                              stringValue.includes('"') || 
+                                              stringValue.includes('\n') ||
+                                              stringValue.includes(';');
+                            return needsQuotes 
+                                ? `"${stringValue.replace(/"/g, '""')}"`
+                                : stringValue;
+                        }).join(',')
+                    )
+                ].join('\n');
+
+                // Create and trigger download
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                link.href = URL.createObjectURL(blob);
+                link.download = `tenable_export_${timestamp}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (error) {
+                console.error('Error exporting to CSV:', error);
+                alert('Error exporting to CSV. Please try again or contact support.');
+            }
         }
 
         // Handle Enter key in input
