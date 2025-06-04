@@ -140,7 +140,7 @@
 
         // Load current configuration
         function loadConfig() {
-            fetch('/config')
+            fetch('/api/config')
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
@@ -194,7 +194,7 @@
             if (accessKey) configData.accessKey = accessKey;
             if (secretKey) configData.secretKey = secretKey;
 
-            fetch('/config', {
+            fetch('/api/config', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -235,7 +235,7 @@
             statusDetails.textContent = 'Please wait while we verify your credentials...';
             statusDiv.classList.remove('hidden');
 
-            fetch('/config/test-connection', {
+            fetch('/api/config/test-connection', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -343,7 +343,7 @@
             showLoadingState();
 
             try {
-                const response = await fetch('/ask', {
+                const response = await fetch('/api/ask', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
