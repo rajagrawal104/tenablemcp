@@ -4,7 +4,7 @@ import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
-import java.time.temporal.Duration
+import java.time.Duration
 import java.time.DayOfWeek
 import com.tenable.mcp.controller.ConversationContext
 
