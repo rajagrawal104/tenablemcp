@@ -69,7 +69,7 @@ class TenableClient(private val config: TenableConfig) {
 
         // Build and execute the request
         val request = Request.Builder()
-            .url("${config.baseUrl.trimEnd('/')}/vulnerabilities?${queryParams.toQueryString()}")
+            .url("${config.baseUrl.trimEnd('/')}/workbenches/vulnerabilities?${queryParams.toQueryString()}")
             .get()
             .build()
 

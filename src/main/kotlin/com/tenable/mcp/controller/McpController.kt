@@ -10,6 +10,8 @@ import com.tenable.mcp.service.Action
 import com.tenable.mcp.service.Intent
 import com.tenable.mcp.service.Severity
 import com.tenable.mcp.service.TimeRange
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 // Request DTO for the /ask endpoint
 data class AskRequest(val prompt: String)
@@ -30,6 +32,8 @@ class McpController(
     private val intentClassifier: IntentClassifier,  // Service for analyzing user prompts
     private val tenableClient: TenableClient        // Client for Tenable.io API calls
 ) {
+    private val logger: Logger = LoggerFactory.getLogger(this::class.java)
+
     /**
      * Process a natural language prompt and return relevant Tenable.io data
      * @param request The user's prompt wrapped in an AskRequest
@@ -37,30 +41,42 @@ class McpController(
      */
     @PostMapping("/ask")
     fun ask(@RequestBody request: AskRequest): AskResponse {
-        // Analyze the prompt to determine the user's intent
-        val intent = intentClassifier.classifyIntent(request.prompt)
-        
-        // Execute the appropriate API call based on the intent
-        val rawResponse = when (intent.action) {
-            Action.LIST_VULNERABILITIES -> tenableClient.listVulnerabilities(
-                severity = intent.severity,
-                timeRange = intent.timeRange,
-                cveId = intent.cveId
-            )
-            Action.LIST_ASSETS -> tenableClient.listAssets(
-                timeRange = intent.timeRange,
-                assetId = intent.assetId
-            )
-            Action.EXPORT_VULNERABILITIES, Action.EXPORT_ASSETS -> tenableClient.exportReport(
-                timeRange = intent.timeRange
-            )
-            else -> mapOf("error" to "Could not determine the intent from the prompt")
-        }
+        try {
+            // Analyze the prompt to determine the user's intent
+            val intent = intentClassifier.classifyIntent(request.prompt)
+            
+            // Execute the appropriate API call based on the intent
+            val rawResponse = when (intent.action) {
+                Action.LIST_VULNERABILITIES -> {
+                    val response = tenableClient.listVulnerabilities(
+                        severity = intent.severity,
+                        timeRange = intent.timeRange,
+                        cveId = intent.cveId
+                    )
+                    // Transform the response to match the expected format
+                    mapOf("vulnerabilities" to (response["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()))
+                }
+                Action.LIST_ASSETS -> tenableClient.listAssets(
+                    timeRange = intent.timeRange,
+                    assetId = intent.assetId
+                )
+                Action.EXPORT_VULNERABILITIES, Action.EXPORT_ASSETS -> tenableClient.exportReport(
+                    timeRange = intent.timeRange
+                )
+                else -> mapOf("error" to "Could not determine the intent from the prompt")
+            }
 
-        // Generate a human-readable summary of the response
-        val summary = generateSummary(intent, rawResponse)
-        
-        return AskResponse(rawResponse, summary)
+            // Generate a human-readable summary of the response
+            val summary = generateSummary(intent, rawResponse)
+            
+            return AskResponse(rawResponse, summary)
+        } catch (e: Exception) {
+            logger.error("Error processing request: ${request.prompt}", e)
+            return AskResponse(
+                mapOf("error" to e.message ?: "An unknown error occurred"),
+                "Error: ${e.message ?: "Could not process the request. Please try again."}"
+            )
+        }
     }
 
     /**
@@ -96,7 +112,7 @@ class McpController(
                 "Report exported successfully"
             }
             else -> {
-                "Could not process the request. Please try rephrasing your question."
+                response["error"]?.toString() ?: "Could not process the request. Please try rephrasing your question."
             }
         }
     }
