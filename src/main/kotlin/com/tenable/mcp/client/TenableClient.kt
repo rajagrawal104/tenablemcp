@@ -28,7 +28,7 @@ class TenableClient(private val config: TenableConfig) {
         .addInterceptor { chain ->
             // Add Tenable API authentication headers
             val request = chain.request().newBuilder()
-                .addHeader("X-ApiKeys", "accessKey=${config.accessKey}; secretKey=${config.secretKey}")
+                .addHeader("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
                 .build()
             chain.proceed(request)
         }
