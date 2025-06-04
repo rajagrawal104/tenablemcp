@@ -358,7 +358,8 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(`API Error: ${response.status} - ${errorData.message || response.statusText}`);
                 }
 
                 const data = await response.json();
@@ -400,8 +401,21 @@
                         }
                         return null;
                     }
+
+                    // Try to find data in different response formats
                     let displayData = findFirstArrayOfObjects(data.rawResponse);
-                    console.log('Display data (generic):', displayData);
+                    
+                    // If no array found, try to convert the response to an array
+                    if (!displayData && typeof data.rawResponse === 'object') {
+                        if (Array.isArray(data.rawResponse)) {
+                            displayData = data.rawResponse;
+                        } else {
+                            // Convert single object to array
+                            displayData = [data.rawResponse];
+                        }
+                    }
+
+                    console.log('Display data (processed):', displayData);
 
                     // Always clear and show the dataTable
                     if (dataTable) {
@@ -409,13 +423,14 @@
                         dataTable.style.display = 'block';
                     }
 
-                    if (!Array.isArray(displayData) || displayData.length === 0 || typeof displayData[0] !== 'object') {
+                    if (!displayData || !Array.isArray(displayData) || displayData.length === 0) {
                         if (dataTable) {
-                            dataTable.innerHTML = '<div class="text-red-500 p-4 bg-red-50 rounded-md">No tabular data found in response. Showing raw JSON below:</div>';
-                            const pre = document.createElement('pre');
-                            pre.className = 'bg-gray-100 p-4 rounded text-xs overflow-x-auto mt-2';
-                            pre.textContent = JSON.stringify(data.rawResponse, null, 2);
-                            dataTable.appendChild(pre);
+                            dataTable.innerHTML = `
+                                <div class="text-yellow-500 p-4 bg-yellow-50 rounded-md">
+                                    <p class="font-medium">No tabular data found in response.</p>
+                                    <p class="mt-2 text-sm">Raw response data:</p>
+                                    <pre class="mt-2 bg-gray-100 p-4 rounded text-xs overflow-x-auto">${JSON.stringify(data.rawResponse, null, 2)}</pre>
+                                </div>`;
                         }
                         updateLoadingProgress(100);
                         hideLoadingState();
@@ -427,10 +442,14 @@
                         if (dataTable) {
                             try {
                                 await createDataTable(displayData);
-                                console.log('Table should be visible now');
+                                console.log('Table created successfully');
                             } catch (tableError) {
                                 console.error('Error creating table:', tableError);
-                                dataTable.innerHTML = '<div class="text-red-500 p-4 bg-red-50 rounded-md">Error displaying data table</div>';
+                                dataTable.innerHTML = `
+                                    <div class="text-red-500 p-4 bg-red-50 rounded-md">
+                                        <p class="font-medium">Error displaying data table</p>
+                                        <p class="mt-2 text-sm">${tableError.message}</p>
+                                    </div>`;
                             }
                         }
                     };
@@ -443,7 +462,11 @@
                                 visualization.style.display = 'grid';
                             } catch (vizError) {
                                 console.error('Error creating visualizations:', vizError);
-                                visualization.innerHTML = '<div class="text-red-500 p-4 bg-red-50 rounded-md">Error creating visualizations</div>';
+                                visualization.innerHTML = `
+                                    <div class="text-red-500 p-4 bg-red-50 rounded-md">
+                                        <p class="font-medium">Error creating visualizations</p>
+                                        <p class="mt-2 text-sm">${vizError.message}</p>
+                                    </div>`;
                                 visualization.style.display = 'block';
                             }
                         } else if (visualization) {
@@ -489,7 +512,11 @@
                     // If no raw response, show a message
                     const responseContainer = document.getElementById('responseContainer');
                     if (responseContainer) {
-                        responseContainer.innerHTML = '<div class="text-gray-700 p-4">No data available to display.</div>';
+                        responseContainer.innerHTML = `
+                            <div class="text-gray-700 p-4 bg-gray-50 rounded-md">
+                                <p class="font-medium">No data available to display.</p>
+                                <p class="mt-2 text-sm">Response summary: ${data.summary || 'No summary available'}</p>
+                            </div>`;
                     }
                     updateLoadingProgress(100);
                     hideLoadingState();
@@ -498,7 +525,9 @@
                 console.error('Error:', error);
                 let errorMessage = 'An error occurred while processing your request. ';
                 
-                if (error.message.includes('504')) {
+                if (error.message.includes('500')) {
+                    errorMessage += 'Server error. Please try again or contact support.';
+                } else if (error.message.includes('504')) {
                     errorMessage += 'The request timed out. Please try again with a more specific query or check your network connection.';
                 } else if (error.message.includes('401') || error.message.includes('403')) {
                     errorMessage += 'Authentication failed. Please check your API configuration.';
@@ -511,7 +540,11 @@
                 addMessageToConversation('assistant', errorMessage);
                 const responseContainer = document.getElementById('responseContainer');
                 if (responseContainer) {
-                    responseContainer.innerHTML = `<div class="text-red-500 p-4 bg-red-50 rounded-md">${errorMessage}</div>`;
+                    responseContainer.innerHTML = `
+                        <div class="text-red-500 p-4 bg-red-50 rounded-md">
+                            <p class="font-medium">Error</p>
+                            <p class="mt-2 text-sm">${errorMessage}</p>
+                        </div>`;
                 }
                 updateLoadingProgress(100);
                 hideLoadingState();
