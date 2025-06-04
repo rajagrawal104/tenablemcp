@@ -166,6 +166,24 @@ configure_gradle_ssl
 # Download Gradle
 download_gradle
 
+# --- SSL BYPASS OPTIONS (for development only) ---
+
+echo -e "${YELLOW}Adding SSL bypass options for Gradle and Java (for development only)...${NC}"
+
+# Gradle SSL bypass properties
+echo "systemProp.gradle.internal.http.insecure=true" >> "$HOME/.gradle/gradle.properties"
+echo "systemProp.gradle.internal.http.ignore-ssl-errors=true" >> "$HOME/.gradle/gradle.properties"
+echo "systemProp.org.gradle.internal.http.insecure=true" >> "$HOME/.gradle/gradle.properties"
+echo "systemProp.org.gradle.internal.http.ignore-ssl-errors=true" >> "$HOME/.gradle/gradle.properties"
+
+echo -e "${GREEN}Gradle SSL bypass properties added to $HOME/.gradle/gradle.properties${NC}"
+
+# Java SSL bypass JVM options (for dev only)
+export JAVA_TOOL_OPTIONS="-Dcom.sun.net.ssl.checkRevocation=false -Djavax.net.ssl.trustStoreType=JKS -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStore=$JAVA_HOME/lib/security/cacerts -Djdk.internal.httpclient.disableHostnameVerification=true $JAVA_TOOL_OPTIONS"
+echo -e "${GREEN}JAVA_TOOL_OPTIONS set for SSL bypass (for current shell).${NC}"
+
+echo -e "${YELLOW}WARNING: These SSL bypass options are for development and testing only. Do NOT use in production!${NC}"
+
 echo -e "\n${GREEN}SSL configuration completed.${NC}"
 echo -e "${YELLOW}If you still experience SSL issues, try the following:${NC}"
 echo -e "1. Run the application with SSL debugging enabled:"
