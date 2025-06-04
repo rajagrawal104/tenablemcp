@@ -7,19 +7,44 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Detect OS
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    OS="macos"
-elif [[ -f /etc/debian_version ]]; then
-    OS="debian"
-elif [[ -f /etc/redhat-release ]]; then
-    OS="redhat"
-else
-    OS="unknown"
-fi
-
-echo -e "${GREEN}Setting up Tenable MCP Project...${NC}"
-echo -e "${BLUE}Detected OS: $OS${NC}"
+# Function to handle SSL certificate issues
+handle_ssl_issues() {
+    echo -e "${YELLOW}SSL certificate issues detected. Attempting to resolve...${NC}"
+    
+    # Create a temporary directory for certificates
+    CERT_DIR="$HOME/.gradle/certs"
+    mkdir -p "$CERT_DIR"
+    
+    # Download Gradle distribution using alternative methods
+    echo -e "${YELLOW}Attempting to download Gradle using alternative methods...${NC}"
+    
+    # Try using curl with insecure flag
+    if command -v curl &> /dev/null; then
+        echo -e "${YELLOW}Downloading Gradle using curl...${NC}"
+        curl -k -o gradle-8.14.1-bin.zip https://services.gradle.org/distributions/gradle-8.14.1-bin.zip
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}Successfully downloaded Gradle using curl.${NC}"
+            return 0
+        fi
+    fi
+    
+    # Try using wget with no-check-certificate
+    if command -v wget &> /dev/null; then
+        echo -e "${YELLOW}Downloading Gradle using wget...${NC}"
+        wget --no-check-certificate -O gradle-8.14.1-bin.zip https://services.gradle.org/distributions/gradle-8.14.1-bin.zip
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}Successfully downloaded Gradle using wget.${NC}"
+            return 0
+        fi
+    fi
+    
+    # If both methods fail, provide manual instructions
+    echo -e "${RED}Automatic download failed. Please try the following:${NC}"
+    echo -e "1. Download Gradle manually from: https://services.gradle.org/distributions/gradle-8.14.1-bin.zip"
+    echo -e "2. Place the downloaded file in the project root directory"
+    echo -e "3. Run the setup script again"
+    return 1
+}
 
 # Function to install Java
 install_java() {
@@ -35,11 +60,13 @@ install_java() {
             ;;
         "debian")
             sudo apt-get update
-            sudo apt-get install -y openjdk-17-jdk
+            sudo apt-get install -y openjdk-17-jdk ca-certificates
+            sudo update-ca-certificates
             echo -e "${GREEN}Java 17 installed successfully.${NC}"
             ;;
         "redhat")
-            sudo yum install -y java-17-openjdk-devel
+            sudo yum install -y java-17-openjdk-devel ca-certificates
+            sudo update-ca-trust
             echo -e "${GREEN}Java 17 installed successfully.${NC}"
             ;;
         *)
@@ -103,11 +130,13 @@ install_gradle() {
             ;;
         "debian")
             sudo apt-get update
-            sudo apt-get install -y gradle
+            sudo apt-get install -y gradle ca-certificates
+            sudo update-ca-certificates
             echo -e "${GREEN}Gradle installed successfully.${NC}"
             ;;
         "redhat")
-            sudo yum install -y gradle
+            sudo yum install -y gradle ca-certificates
+            sudo update-ca-trust
             echo -e "${GREEN}Gradle installed successfully.${NC}"
             ;;
         *)
@@ -117,6 +146,20 @@ install_gradle() {
             ;;
     esac
 }
+
+# Detect OS
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    OS="macos"
+elif [[ -f /etc/debian_version ]]; then
+    OS="debian"
+elif [[ -f /etc/redhat-release ]]; then
+    OS="redhat"
+else
+    OS="unknown"
+fi
+
+echo -e "${GREEN}Setting up Tenable MCP Project...${NC}"
+echo -e "${BLUE}Detected OS: $OS${NC}"
 
 # Check and install Java if needed
 if ! command -v java &> /dev/null; then
@@ -169,6 +212,11 @@ if ! command -v gradle &> /dev/null; then
         install_gradle
     else
         echo -e "${YELLOW}Using Gradle wrapper instead.${NC}"
+        # Try to download Gradle wrapper
+        if ! ./gradlew --version &> /dev/null; then
+            echo -e "${YELLOW}Gradle wrapper download failed. Attempting to resolve SSL issues...${NC}"
+            handle_ssl_issues
+        fi
     fi
 else
     echo -e "${GREEN}Gradle detected.${NC}"
