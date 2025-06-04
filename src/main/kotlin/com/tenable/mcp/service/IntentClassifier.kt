@@ -192,7 +192,7 @@ class IntentClassifier {
         
         // Check for scan-related actions first
         if (actionPatterns["scan"]?.any { it in lowerPrompt } == true) {
-            return Action.START_SCAN
+            return Action.LAUNCH_SCAN
         }
 
         // Check for export actions

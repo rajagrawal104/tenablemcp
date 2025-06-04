@@ -6,21 +6,14 @@ import com.tenable.mcp.service.TimeRange
 import mu.KotlinLogging
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.springframework.stereotype.Component
-import retrofit2.Retrofit
-import retrofit2.converter.jackson.JacksonConverterFactory
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
-import io.ktor.client.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.serialization.kotlinx.json.*
-import kotlinx.serialization.json.Json
 
 private val logger = KotlinLogging.logger {}
 
@@ -30,14 +23,18 @@ private val logger = KotlinLogging.logger {}
  */
 @Component
 class TenableClient(private val config: TenableConfig) {
-    private val client = HttpClient {
-        install(ContentNegotiation) {
-            json(Json {
-                ignoreUnknownKeys = true
-                isLenient = true
-            })
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor { chain ->
+            val request = chain.request().newBuilder()
+                .addHeader("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
+                .addHeader("Accept", "application/json")
+                .addHeader("Content-Type", "application/json")
+                .build()
+            chain.proceed(request)
         }
-    }
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .build()
 
     private val baseUrl = config.baseUrl.trimEnd('/')
 
@@ -123,7 +120,7 @@ class TenableClient(private val config: TenableConfig) {
         // Build and execute the request
         val request = Request.Builder()
             .url("$baseUrl/reports/export?${queryParams.toQueryString()}")
-            .post(okhttp3.RequestBody.create(null, ByteArray(0)))
+            .post(ByteArray(0).toRequestBody(null, 0, 0))
             .build()
 
         return executeRequest(request)
@@ -158,50 +155,37 @@ class TenableClient(private val config: TenableConfig) {
      * @return URL-encoded query string
      */
     private fun Map<String, String>.toQueryString(): String {
-        return entries.joinToString("&") { "${it.key}=${it.value}" }
+        return entries.filter { it.value.isNotBlank() }
+            .joinToString("&") { "${it.key}=${it.value}" }
     }
 
     fun listScans(timeRange: TimeRange? = null): Map<String, Any> {
-        val url = "$baseUrl/scans"
-        
-        val response = client.get(url) {
-            headers {
-                append("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
-                append("Accept", "application/json")
-            }
-            parameter("filter", "last_modification_date:${timeRange?.start ?: "0"}")
+        val queryParams = mutableMapOf<String, String>()
+        timeRange?.let {
+            queryParams["last_modification_date"] = it.start.format(DateTimeFormatter.ISO_DATE_TIME)
         }
-
-        return if (response.status.isSuccess()) {
-            val scans = response.body<Map<String, Any>>()["scans"] as? List<Map<String, Any>> ?: emptyList()
-            mapOf("scans" to scans)
-        } else {
-            mapOf("error" to "Failed to list scans: ${response.status}")
-        }
+        val request = Request.Builder()
+            .url("$baseUrl/scans?${queryParams.toQueryString()}")
+            .get()
+            .build()
+        return executeRequest(request)
     }
 
-    fun startScan(scanId: String? = null): Map<String, Any> {
+    fun startScan(scanId: String? = null): Map<String, Any?> {
         val url = if (scanId != null) {
             "$baseUrl/scans/$scanId/launch"
         } else {
             "$baseUrl/scans"
         }
         
-        val response = if (scanId != null) {
-            client.post(url) {
-                headers {
-                    append("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
-                    append("Accept", "application/json")
-                }
-            }
+        val request = if (scanId != null) {
+            Request.Builder()
+                .url(url)
+                .post(ByteArray(0).toRequestBody(null, 0, 0))
+                .build()
         } else {
-            client.post(url) {
-                headers {
-                    append("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
-                    append("Accept", "application/json")
-                    append("Content-Type", "application/json")
-                }
-                setBody(mapOf(
+            val body = jacksonObjectMapper().writeValueAsString(
+                mapOf(
                     "name" to "MCP Automated Scan",
                     "targets" to "default",
                     "enabled" to true,
@@ -209,44 +193,45 @@ class TenableClient(private val config: TenableConfig) {
                         "type" to "once",
                         "start_time" to System.currentTimeMillis()
                     )
-                ))
-            }
+                )
+            ).toRequestBody("application/json".toMediaTypeOrNull())
+            
+            Request.Builder()
+                .url(url)
+                .post(body)
+                .build()
         }
-
-        return if (response.status.isSuccess()) {
-            val scanUuid = response.body<Map<String, Any>>()["scan_uuid"] as? String
+        
+        val response = executeRequest(request)
+        return if (response.containsKey("scan_uuid")) {
             mapOf(
                 "success" to true,
-                "scan_uuid" to scanUuid,
+                "scan_uuid" to response["scan_uuid"],
                 "message" to "Scan started successfully"
             )
         } else {
             mapOf(
-                "error" to "Failed to start scan: ${response.status}",
+                "error" to "Failed to start scan",
                 "success" to false
             )
         }
     }
 
-    fun getScanStatus(scanId: String): Map<String, Any> {
-        val url = "$baseUrl/scans/$scanId"
-        
-        val response = client.get(url) {
-            headers {
-                append("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
-                append("Accept", "application/json")
-            }
-        }
-
-        return if (response.status.isSuccess()) {
-            val scanInfo = response.body<Map<String, Any>>()
+    fun getScanStatus(scanId: String): Map<String, Any?> {
+        val request = Request.Builder()
+            .url("$baseUrl/scans/$scanId")
+            .get()
+            .build()
+            
+        val response = executeRequest(request)
+        return if (response.containsKey("status")) {
             mapOf(
-                "status" to (scanInfo["status"] as? String ?: "unknown"),
-                "scan_details" to scanInfo
+                "status" to response["status"],
+                "scan_details" to response
             )
         } else {
             mapOf(
-                "error" to "Failed to get scan status: ${response.status}",
+                "error" to "Failed to get scan status",
                 "status" to "error"
             )
         }

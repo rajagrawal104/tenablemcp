@@ -289,6 +289,7 @@
             const responseContainer = document.getElementById('responseContainer');
             if (responseContainer) {
                 responseContainer.innerHTML = '<div class="text-gray-500 p-4">Processing your request...</div>';
+                responseContainer.style.display = 'block';
             }
 
             try {
@@ -311,7 +312,7 @@
                 }
 
                 const data = await response.json();
-                console.log('Response data:', data); // Debug log
+                console.log('Full backend response:', data); // Debug log
                 
                 // Update context
                 currentContext = {
@@ -325,48 +326,60 @@
                 // Clear previous visualizations
                 clearVisualizations();
 
-                // Clear response container
+                // Always clear and show the response container
                 if (responseContainer) {
                     responseContainer.innerHTML = '';
+                    responseContainer.style.display = 'block';
                 }
 
                 // Handle the response based on the action
                 if (data.rawResponse) {
                     const dataTable = document.getElementById('dataTable');
                     const visualization = document.getElementById('visualization');
-                    
-                    // Extract data based on action
-                    let displayData = [];
-                    if (data.action === 'list_vulnerabilities' && data.rawResponse.vulnerabilities) {
-                        displayData = data.rawResponse.vulnerabilities;
-                    } else if (data.action === 'list_assets' && data.rawResponse.assets) {
-                        displayData = data.rawResponse.assets;
-                    } else if (data.action === 'list_scans' && data.rawResponse.scans) {
-                        displayData = data.rawResponse.scans;
-                    } else if (data.rawResponse.scans) {
-                        displayData = data.rawResponse.scans;
-                    } else if (data.rawResponse.vulnerabilities) {
-                        displayData = data.rawResponse.vulnerabilities;
-                    } else if (data.rawResponse.assets) {
-                        displayData = data.rawResponse.assets;
+
+                    // --- GENERIC: Recursively find the first array of objects in rawResponse ---
+                    function findFirstArrayOfObjects(obj) {
+                        if (!obj) return null;
+                        if (Array.isArray(obj) && obj.length > 0 && typeof obj[0] === 'object') {
+                            return obj;
+                        }
+                        if (typeof obj === 'object') {
+                            for (const key in obj) {
+                                if (obj.hasOwnProperty(key)) {
+                                    const found = findFirstArrayOfObjects(obj[key]);
+                                    if (found) return found;
+                                }
+                            }
+                        }
+                        return null;
+                    }
+                    let displayData = findFirstArrayOfObjects(data.rawResponse);
+                    console.log('Display data (generic):', displayData); // Debug log
+
+                    // Always clear and show the dataTable
+                    if (dataTable) {
+                        dataTable.innerHTML = '';
+                        dataTable.style.display = 'block';
                     }
 
-                    console.log('Display data:', displayData); // Debug log
+                    if (!Array.isArray(displayData) || displayData.length === 0 || typeof displayData[0] !== 'object') {
+                        if (dataTable) {
+                            dataTable.innerHTML = '<div class="text-red-500 p-4 bg-red-50 rounded-md">No tabular data found in response. Showing raw JSON below:</div>';
+                            const pre = document.createElement('pre');
+                            pre.className = 'bg-gray-100 p-4 rounded text-xs overflow-x-auto mt-2';
+                            pre.textContent = JSON.stringify(data.rawResponse, null, 2);
+                            dataTable.appendChild(pre);
+                        }
+                        return;
+                    }
 
                     // Always try to show the data table first
                     if (dataTable) {
                         try {
-                            if (displayData.length > 0) {
-                                createDataTable(displayData);
-                                dataTable.style.display = 'block';
-                            } else {
-                                dataTable.innerHTML = '<div class="text-gray-700 p-4">No data available to display.</div>';
-                                dataTable.style.display = 'block';
-                            }
+                            createDataTable(displayData);
                         } catch (tableError) {
                             console.error('Error creating table:', tableError);
                             dataTable.innerHTML = '<div class="text-red-500 p-4 bg-red-50 rounded-md">Error displaying data table</div>';
-                            dataTable.style.display = 'block';
                         }
                     }
 
@@ -398,7 +411,6 @@
                         responseContainer.innerHTML = '<div class="text-gray-700 p-4">No data available to display.</div>';
                     }
                 }
-
             } catch (error) {
                 console.error('Error:', error);
                 let errorMessage = 'An error occurred while processing your request. ';
@@ -416,6 +428,7 @@
                 addMessageToConversation('assistant', errorMessage);
                 if (responseContainer) {
                     responseContainer.innerHTML = `<div class="text-red-500 p-4 bg-red-50 rounded-md">${errorMessage}</div>`;
+                    responseContainer.style.display = 'block';
                 }
             }
         }
@@ -567,6 +580,10 @@
 
             console.log('Creating table with data:', data); // Debug log
 
+            // Limit to first 50 rows for performance
+            const maxRows = 50;
+            const limitedData = data.slice(0, maxRows);
+
             const table = document.createElement('table');
             table.className = 'min-w-full divide-y divide-gray-200';
 
@@ -577,7 +594,7 @@
             
             // Get all unique keys from the data
             const allKeys = new Set();
-            data.forEach(item => {
+            limitedData.forEach(item => {
                 if (item && typeof item === 'object') {
                     Object.keys(item).forEach(key => allKeys.add(key));
                 }
@@ -604,7 +621,7 @@
             const tbody = document.createElement('tbody');
             tbody.className = 'bg-white divide-y divide-gray-200';
             
-            data.forEach(item => {
+            limitedData.forEach(item => {
                 if (!item || typeof item !== 'object') return;
                 
                 const row = document.createElement('tr');
@@ -635,6 +652,14 @@
             tableContainer.innerHTML = '';
             tableContainer.appendChild(table);
             tableContainer.style.display = 'block';
+
+            // Show a message if not all rows are displayed
+            if (data.length > maxRows) {
+                const info = document.createElement('div');
+                info.className = 'text-xs text-gray-500 mt-2';
+                info.textContent = `Showing first ${maxRows} of ${data.length} results. Please refine your query for more specific results.`;
+                tableContainer.appendChild(info);
+            }
         }
 
         function exportToCSV(data) {
