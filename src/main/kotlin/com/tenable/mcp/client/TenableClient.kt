@@ -29,6 +29,8 @@ class TenableClient(private val config: TenableConfig) {
             // Add Tenable API authentication headers
             val request = chain.request().newBuilder()
                 .addHeader("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
+                .addHeader("Accept", "application/json")
+                .addHeader("Content-Type", "application/json")
                 .build()
             chain.proceed(request)
         }
@@ -68,8 +70,6 @@ class TenableClient(private val config: TenableConfig) {
         // Build and execute the request
         val request = Request.Builder()
             .url("${config.baseUrl.trimEnd('/')}/vulnerabilities?${queryParams.toQueryString()}")
-            .addHeader("Accept", "application/json")
-            .addHeader("Content-Type", "application/json")
             .get()
             .build()
 
@@ -98,8 +98,6 @@ class TenableClient(private val config: TenableConfig) {
         // Build and execute the request
         val request = Request.Builder()
             .url("${config.baseUrl.trimEnd('/')}/assets?${queryParams.toQueryString()}")
-            .addHeader("Accept", "application/json")
-            .addHeader("Content-Type", "application/json")
             .get()
             .build()
 
@@ -129,8 +127,6 @@ class TenableClient(private val config: TenableConfig) {
         // Build and execute the request
         val request = Request.Builder()
             .url("${config.baseUrl}/reports/export?${queryParams.toQueryString()}")
-            .addHeader("Accept", "application/json")
-            .addHeader("Content-Type", "application/json")
             .post(okhttp3.RequestBody.create(null, ByteArray(0)))
             .build()
 
