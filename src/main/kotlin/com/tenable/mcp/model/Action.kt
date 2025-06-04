@@ -6,5 +6,6 @@ enum class Action {
     LIST_SCANS,
     EXPORT_VULNERABILITIES,
     EXPORT_ASSETS,
+    EXPORT_SCANS,
     START_SCAN
 } 

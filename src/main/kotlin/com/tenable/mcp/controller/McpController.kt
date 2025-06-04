@@ -97,7 +97,7 @@ class McpController(
                         )
                     )
                 }
-                Action.EXPORT_VULNERABILITIES, Action.EXPORT_ASSETS -> {
+                Action.EXPORT_VULNERABILITIES, Action.EXPORT_ASSETS, Action.EXPORT_SCANS -> {
                     val response = tenableClient.exportReport(
                         timeRange = intent.timeRange
                     )
