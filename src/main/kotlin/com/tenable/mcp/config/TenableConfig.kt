@@ -10,7 +10,6 @@ import org.springframework.context.annotation.Configuration
 @Configuration
 @ConfigurationProperties(prefix = "tenable")
 data class TenableConfig(
-    var apiKey: String = "",           // Tenable.io API key
     var accessKey: String = "",        // Tenable.io Access key
     var secretKey: String = "",        // Tenable.io Secret key
     var baseUrl: String = "https://cloud.tenable.com",  // Tenable.io API base URL

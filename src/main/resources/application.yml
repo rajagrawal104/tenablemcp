@@ -10,8 +10,8 @@ tenable:
   timeout: 30000
   maxRetries: 3
   # API keys should be set through the web interface or environment variables
-  apiKey: ${TENABLE_API_KEY:}
   accessKey: ${TENABLE_ACCESS_KEY:}
+  secretKey: ${TENABLE_SECRET_KEY:}
 
 logging:
   level:

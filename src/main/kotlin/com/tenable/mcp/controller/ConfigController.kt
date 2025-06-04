@@ -11,7 +11,6 @@ class ConfigController(private val tenableConfig: TenableConfig) {
     @PostMapping
     fun updateConfig(@RequestBody config: Map<String, String>): ResponseEntity<Map<String, Any>> {
         return try {
-            config["apiKey"]?.let { tenableConfig.apiKey = it }
             config["accessKey"]?.let { tenableConfig.accessKey = it }
             config["secretKey"]?.let { tenableConfig.secretKey = it }
             config["baseUrl"]?.let { tenableConfig.baseUrl = it }
@@ -35,7 +34,6 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                 "baseUrl" to tenableConfig.baseUrl,
                 "timeout" to tenableConfig.timeout,
                 "maxRetries" to tenableConfig.maxRetries,
-                "hasApiKey" to tenableConfig.apiKey.isNotEmpty(),
                 "hasAccessKey" to tenableConfig.accessKey.isNotEmpty(),
                 "hasSecretKey" to tenableConfig.secretKey.isNotEmpty()
             )
