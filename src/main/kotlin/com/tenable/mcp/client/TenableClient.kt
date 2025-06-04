@@ -14,6 +14,13 @@ import java.util.concurrent.TimeUnit
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
+import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.json.Json
 
 private val logger = KotlinLogging.logger {}
 
@@ -23,27 +30,16 @@ private val logger = KotlinLogging.logger {}
  */
 @Component
 class TenableClient(private val config: TenableConfig) {
-    // Configure HTTP client with authentication and timeouts
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .addInterceptor { chain ->
-            // Add Tenable API authentication headers
-            val request = chain.request().newBuilder()
-                .addHeader("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
-                .addHeader("Accept", "application/json")
-                .addHeader("Content-Type", "application/json")
-                .build()
-            chain.proceed(request)
+    private val client = HttpClient {
+        install(ContentNegotiation) {
+            json(Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+            })
         }
-        .connectTimeout(30, TimeUnit.SECONDS)  // Connection timeout
-        .readTimeout(30, TimeUnit.SECONDS)     // Read timeout
-        .build()
+    }
 
-    // Configure Retrofit for API calls
-    private val retrofit = Retrofit.Builder()
-        .baseUrl(config.baseUrl)
-        .client(client)
-        .addConverterFactory(JacksonConverterFactory.create())  // Use Jackson for JSON parsing
-        .build()
+    private val baseUrl = config.baseUrl.trimEnd('/')
 
     /**
      * List vulnerabilities matching the specified criteria
@@ -69,7 +65,7 @@ class TenableClient(private val config: TenableConfig) {
 
         // Build and execute the request
         val request = Request.Builder()
-            .url("${config.baseUrl.trimEnd('/')}/workbenches/vulnerabilities?${queryParams.toQueryString()}")
+            .url("$baseUrl/workbenches/vulnerabilities?${queryParams.toQueryString()}")
             .get()
             .build()
 
@@ -97,7 +93,7 @@ class TenableClient(private val config: TenableConfig) {
 
         // Build and execute the request
         val request = Request.Builder()
-            .url("${config.baseUrl.trimEnd('/')}/assets?${queryParams.toQueryString()}")
+            .url("$baseUrl/assets?${queryParams.toQueryString()}")
             .get()
             .build()
 
@@ -126,7 +122,7 @@ class TenableClient(private val config: TenableConfig) {
 
         // Build and execute the request
         val request = Request.Builder()
-            .url("${config.baseUrl}/reports/export?${queryParams.toQueryString()}")
+            .url("$baseUrl/reports/export?${queryParams.toQueryString()}")
             .post(okhttp3.RequestBody.create(null, ByteArray(0)))
             .build()
 
@@ -166,11 +162,13 @@ class TenableClient(private val config: TenableConfig) {
     }
 
     fun listScans(timeRange: TimeRange? = null): Map<String, Any> {
-        val url = "${config.baseUrl.trimEnd('/')}/scans"
-        val headers = getHeaders()
+        val url = "$baseUrl/scans"
         
         val response = client.get(url) {
-            headers { headers.forEach { (key, value) -> append(key, value) } }
+            headers {
+                append("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
+                append("Accept", "application/json")
+            }
             parameter("filter", "last_modification_date:${timeRange?.start ?: "0"}")
         }
 
@@ -184,20 +182,25 @@ class TenableClient(private val config: TenableConfig) {
 
     fun startScan(scanId: String? = null): Map<String, Any> {
         val url = if (scanId != null) {
-            "${config.baseUrl.trimEnd('/')}/scans/$scanId/launch"
+            "$baseUrl/scans/$scanId/launch"
         } else {
-            "${config.baseUrl.trimEnd('/')}/scans"
+            "$baseUrl/scans"
         }
-        val headers = getHeaders()
         
         val response = if (scanId != null) {
             client.post(url) {
-                headers { headers.forEach { (key, value) -> append(key, value) } }
+                headers {
+                    append("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
+                    append("Accept", "application/json")
+                }
             }
         } else {
             client.post(url) {
-                headers { headers.forEach { (key, value) -> append(key, value) } }
-                contentType(okhttp3.MediaType.parse("application/json"))
+                headers {
+                    append("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
+                    append("Accept", "application/json")
+                    append("Content-Type", "application/json")
+                }
                 setBody(mapOf(
                     "name" to "MCP Automated Scan",
                     "targets" to "default",
@@ -226,11 +229,13 @@ class TenableClient(private val config: TenableConfig) {
     }
 
     fun getScanStatus(scanId: String): Map<String, Any> {
-        val url = "${config.baseUrl.trimEnd('/')}/scans/$scanId"
-        val headers = getHeaders()
+        val url = "$baseUrl/scans/$scanId"
         
         val response = client.get(url) {
-            headers { headers.forEach { (key, value) -> append(key, value) } }
+            headers {
+                append("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
+                append("Accept", "application/json")
+            }
         }
 
         return if (response.status.isSuccess()) {
@@ -245,13 +250,5 @@ class TenableClient(private val config: TenableConfig) {
                 "status" to "error"
             )
         }
-    }
-
-    private fun getHeaders(): okhttp3.Headers {
-        val headers = okhttp3.Headers.Builder()
-        headers.add("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
-        headers.add("Accept", "application/json")
-        headers.add("Content-Type", "application/json")
-        return headers.build()
     }
 } 
