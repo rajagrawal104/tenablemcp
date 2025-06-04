@@ -337,4 +337,44 @@ data class Schedule(
     val interval: Int,
     val startTime: LocalDateTime,
     val timezone: String
-) 
+)
+
+data class ConversationContext(
+    val history: List<Message> = emptyList(),
+    val currentContext: Map<String, Any> = emptyMap()
+)
+
+data class Message(
+    val role: String,
+    val content: String
+)
+
+data class Intent(
+    val action: Action,          // The main action to perform
+    val subAction: SubAction? = null,  // Optional sub-action for more specific operations
+    val severity: Severity? = null,  // Optional severity filter
+    val timeRange: TimeRange? = null, // Optional time range filter
+    val cveId: String? = null,      // Optional CVE ID filter
+    val assetId: String? = null,    // Optional asset ID filter
+    val scanId: String? = null,     // Optional scan ID
+    val webAppId: String? = null,   // Optional web app ID
+    val containerId: String? = null, // Optional container ID
+    val cloudAccountId: String? = null, // Optional cloud account ID
+    val reportId: String? = null,   // Optional report ID
+    val policyId: String? = null,   // Optional policy ID
+    val tagId: String? = null,      // Optional tag ID
+    val userId: String? = null,     // Optional user ID
+    val groupId: String? = null,    // Optional group ID
+    val permissionId: String? = null, // Optional permission ID
+    val scanStatus: String? = null   // Optional scan status
+)
+
+enum class SubAction {
+    CREATE,     // Create a new resource
+    UPDATE,     // Update an existing resource
+    DELETE,     // Delete a resource
+    EXPORT,     // Export data
+    DOWNLOAD,   // Download data
+    LAUNCH,     // Launch a scan
+    STATUS      // Get status
+} 

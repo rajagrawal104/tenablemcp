@@ -1,8 +1,9 @@
 package com.tenable.mcp.client
 
 import com.tenable.mcp.config.TenableConfig
-import com.tenable.mcp.service.Severity
-import com.tenable.mcp.service.TimeRange
+import com.tenable.mcp.model.Severity
+import com.tenable.mcp.model.TimeRange
+import com.tenable.mcp.model.Action
 import mu.KotlinLogging
 import okhttp3.OkHttpClient
 import okhttp3.Request

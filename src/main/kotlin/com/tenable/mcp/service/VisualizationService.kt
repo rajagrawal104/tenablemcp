@@ -1,6 +1,7 @@
 package com.tenable.mcp.service
 
 import com.tenable.mcp.client.TenableClient
+import com.tenable.mcp.model.TimeRange
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter

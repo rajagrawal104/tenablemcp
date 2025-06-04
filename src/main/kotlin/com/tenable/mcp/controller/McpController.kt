@@ -6,10 +6,12 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import com.tenable.mcp.service.Action
-import com.tenable.mcp.service.Intent
-import com.tenable.mcp.service.Severity
-import com.tenable.mcp.service.TimeRange
+import com.tenable.mcp.model.Severity
+import com.tenable.mcp.model.TimeRange
+import com.tenable.mcp.model.Action
+import com.tenable.mcp.model.ConversationContext
+import com.tenable.mcp.model.Message
+import com.tenable.mcp.model.Intent
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -25,18 +27,6 @@ data class AskResponse(
     val summary: String,                // Human-readable summary of the response
     val action: String? = null,         // The action taken
     val filters: Map<String, Any>? = null  // Any filters applied
-)
-
-// Conversation context
-data class ConversationContext(
-    val history: List<Message> = emptyList(),
-    val currentContext: Map<String, Any> = emptyMap()
-)
-
-// Message in conversation history
-data class Message(
-    val role: String,
-    val content: String
 )
 
 /**

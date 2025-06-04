@@ -11,6 +11,7 @@ import com.tenable.mcp.model.Intent
 import com.tenable.mcp.model.Action
 import com.tenable.mcp.model.Severity
 import com.tenable.mcp.model.TimeRange
+import com.tenable.mcp.model.SubAction
 
 // Data class representing the extracted intent from a user prompt
 data class Intent(

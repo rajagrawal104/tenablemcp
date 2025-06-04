@@ -1,6 +1,6 @@
 package com.tenable.mcp.controller
 
-import com.tenable.mcp.service.TimeRange
+import com.tenable.mcp.model.TimeRange
 import com.tenable.mcp.service.VisualizationService
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
