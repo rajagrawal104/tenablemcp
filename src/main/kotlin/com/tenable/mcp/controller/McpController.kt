@@ -72,9 +72,10 @@ class McpController(
             return AskResponse(rawResponse, summary)
         } catch (e: Exception) {
             logger.error("Error processing request: ${request.prompt}", e)
+            val errorMessage = e.message ?: "An unknown error occurred"
             return AskResponse(
-                mapOf("error" to e.message ?: "An unknown error occurred"),
-                "Error: ${e.message ?: "Could not process the request. Please try again."}"
+                mapOf("error" to errorMessage),
+                "Error: $errorMessage"
             )
         }
     }
