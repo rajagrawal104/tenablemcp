@@ -67,7 +67,9 @@ class TenableClient(private val config: TenableConfig) {
 
         // Build and execute the request
         val request = Request.Builder()
-            .url("${config.baseUrl}/vulns?${queryParams.toQueryString()}")
+            .url("${config.baseUrl}/api/v3/vulnerabilities?${queryParams.toQueryString()}")
+            .addHeader("Accept", "application/json")
+            .addHeader("Content-Type", "application/json")
             .get()
             .build()
 
@@ -95,7 +97,9 @@ class TenableClient(private val config: TenableConfig) {
 
         // Build and execute the request
         val request = Request.Builder()
-            .url("${config.baseUrl}/assets?${queryParams.toQueryString()}")
+            .url("${config.baseUrl}/api/v3/assets?${queryParams.toQueryString()}")
+            .addHeader("Accept", "application/json")
+            .addHeader("Content-Type", "application/json")
             .get()
             .build()
 
@@ -124,7 +128,9 @@ class TenableClient(private val config: TenableConfig) {
 
         // Build and execute the request
         val request = Request.Builder()
-            .url("${config.baseUrl}/reports/export?${queryParams.toQueryString()}")
+            .url("${config.baseUrl}/api/v3/reports/export?${queryParams.toQueryString()}")
+            .addHeader("Accept", "application/json")
+            .addHeader("Content-Type", "application/json")
             .post(okhttp3.RequestBody.create(null, ByteArray(0)))
             .build()
 

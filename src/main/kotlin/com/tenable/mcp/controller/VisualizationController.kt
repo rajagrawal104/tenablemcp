@@ -10,7 +10,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 @RestController
-@RequestMapping("/api/v1/visualizations")
+@RequestMapping("/api/v3/visualizations")
 class VisualizationController(private val visualizationService: VisualizationService) {
 
     /**
@@ -38,7 +38,7 @@ class VisualizationController(private val visualizationService: VisualizationSer
     fun exportVulnerabilitiesCsv(
         @RequestParam(required = false) startTime: String?,
         @RequestParam(required = false) endTime: String?
-    ): ResponseEntity<String> {
+    ): ResponseEntity<ByteArray> {
         val timeRange = if (startTime != null && endTime != null) {
             TimeRange(
                 LocalDateTime.parse(startTime, DateTimeFormatter.ISO_DATE_TIME),
@@ -46,17 +46,12 @@ class VisualizationController(private val visualizationService: VisualizationSer
             )
         } else null
 
-        val report = visualizationService.generateReport(timeRange)
-        val csvContent = generateCsvFromReport(report)
-        
-        val headers = HttpHeaders().apply {
-            contentType = MediaType.parseMediaType("text/csv")
-            set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=security_report.csv")
-        }
+        val csvData = visualizationService.exportVulnerabilitiesCsv(timeRange)
         
         return ResponseEntity.ok()
-            .headers(headers)
-            .body(csvContent)
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=vulnerabilities.csv")
+            .header(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_PLAIN_VALUE)
+            .body(csvData)
     }
 
     /**
