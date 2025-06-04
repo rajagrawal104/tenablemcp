@@ -7,6 +7,8 @@ import java.time.temporal.TemporalAdjusters
 import java.time.Duration
 import java.time.DayOfWeek
 import com.tenable.mcp.controller.ConversationContext
+import com.tenable.mcp.model.ConversationContext as ModelConversationContext
+import com.tenable.mcp.model.Intent
 
 // Data class representing the extracted intent from a user prompt
 data class Intent(
@@ -163,21 +165,25 @@ class IntentClassifier {
      * @param context Optional conversation context
      * @return Intent object containing the extracted action and parameters
      */
-    fun classifyIntent(prompt: String, context: ConversationContext? = null): Intent {
-        val action = determineAction(prompt, context)
-        val severity = determineSeverity(prompt, context)
-        val timeRange = determineTimeRange(prompt, context)
-        val cveId = determineCveId(prompt)
-        val assetId = determineAssetId(prompt)
-        val scanStatus = determineScanStatus(prompt)
-
+    fun classifyIntent(prompt: String, context: ModelConversationContext? = null): Intent {
+        val lowerPrompt = prompt.lowercase()
+        
+        // Determine the action
+        val action = determineAction(lowerPrompt, context)
+        
+        // Determine severity if applicable
+        val severity = determineSeverity(lowerPrompt, context)
+        
+        // Determine time range
+        val timeRange = determineTimeRange(lowerPrompt, context)
+        
         return Intent(
             action = action,
             severity = severity,
             timeRange = timeRange,
-            cveId = cveId,
-            assetId = assetId,
-            scanStatus = scanStatus
+            cveId = determineCveId(prompt),
+            assetId = determineAssetId(prompt),
+            scanStatus = determineScanStatus(prompt)
         )
     }
 
@@ -187,34 +193,81 @@ class IntentClassifier {
      * @param context Optional conversation context
      * @return The determined Action
      */
-    private fun determineAction(prompt: String, context: ConversationContext?): Action {
+    private fun determineAction(prompt: String, context: ModelConversationContext?): Action {
         val lowerPrompt = prompt.lowercase()
         
-        // Check for scan-related actions first
-        if (actionPatterns["scan"]?.any { it in lowerPrompt } == true) {
-            return Action.LAUNCH_SCAN
-        }
+        // Scan-related patterns
+        val scanPatterns = mapOf(
+            "list.*scan" to "list_scans",
+            "show.*scan" to "list_scans",
+            "get.*scan" to "list_scans",
+            "display.*scan" to "list_scans",
+            "view.*scan" to "list_scans",
+            "scan.*list" to "list_scans",
+            "scan.*history" to "list_scans",
+            "scan.*schedule" to "list_scans",
+            "scheduled.*scan" to "list_scans",
+            "historical.*scan" to "list_scans",
+            "past.*scan" to "list_scans",
+            "previous.*scan" to "list_scans",
+            "recent.*scan" to "list_scans",
+            "last.*scan" to "list_scans",
+            "all.*scan" to "list_scans",
+            "scan.*status" to "list_scans",
+            "scan.*result" to "list_scans",
+            "scan.*report" to "list_scans"
+        )
 
-        // Check for export actions
-        if (actionPatterns["export"]?.any { it in lowerPrompt } == true) {
-            return if ("asset" in lowerPrompt) Action.EXPORT_ASSETS else Action.EXPORT_VULNERABILITIES
-        }
-
-        // Check for list actions
-        if (actionPatterns["list"]?.any { it in lowerPrompt } == true) {
-            return when {
-                "scan" in lowerPrompt -> Action.LIST_SCANS
-                "asset" in lowerPrompt -> Action.LIST_ASSETS
-                else -> Action.LIST_VULNERABILITIES
+        // Check for scan-related patterns first
+        for ((pattern, action) in scanPatterns) {
+            if (prompt.matches(Regex(pattern, RegexOption.IGNORE_CASE))) {
+                return Action.valueOf(action)
             }
         }
 
-        // Use context if available
-        context?.let {
-            return when (it.currentContext["lastAction"]) {
-                "list_scans" -> Action.LIST_SCANS
-                "list_assets" -> Action.LIST_ASSETS
-                else -> Action.LIST_VULNERABILITIES
+        // Asset-related patterns
+        val assetPatterns = mapOf(
+            "list.*asset" to "list_assets",
+            "show.*asset" to "list_assets",
+            "get.*asset" to "list_assets",
+            "display.*asset" to "list_assets",
+            "view.*asset" to "list_assets",
+            "asset.*list" to "list_assets",
+            "all.*asset" to "list_assets"
+        )
+
+        // Check for asset-related patterns
+        for ((pattern, action) in assetPatterns) {
+            if (prompt.matches(Regex(pattern, RegexOption.IGNORE_CASE))) {
+                return Action.valueOf(action)
+            }
+        }
+
+        // Vulnerability-related patterns
+        val vulnPatterns = mapOf(
+            "list.*vulnerability" to "list_vulnerabilities",
+            "show.*vulnerability" to "list_vulnerabilities",
+            "get.*vulnerability" to "list_vulnerabilities",
+            "display.*vulnerability" to "list_vulnerabilities",
+            "view.*vulnerability" to "list_vulnerabilities",
+            "vulnerability.*list" to "list_vulnerabilities",
+            "all.*vulnerability" to "list_vulnerabilities",
+            "vuln.*list" to "list_vulnerabilities",
+            "show.*vuln" to "list_vulnerabilities",
+            "list.*vuln" to "list_vulnerabilities"
+        )
+
+        // Check for vulnerability-related patterns
+        for ((pattern, action) in vulnPatterns) {
+            if (prompt.matches(Regex(pattern, RegexOption.IGNORE_CASE))) {
+                return Action.valueOf(action)
+            }
+        }
+
+        // Check context for previous action
+        context?.currentContext?.get("lastAction")?.let { lastAction ->
+            if (lastAction is String && lastAction.startsWith("list_")) {
+                return Action.valueOf(lastAction)
             }
         }
 
@@ -228,7 +281,7 @@ class IntentClassifier {
      * @param context Optional conversation context
      * @return The determined Severity, or null if not specified
      */
-    private fun determineSeverity(prompt: String, context: ConversationContext? = null): Severity? {
+    private fun determineSeverity(prompt: String, context: ModelConversationContext? = null): Severity? {
         val lowerPrompt = prompt.lowercase()
 
         // Check for explicit severity mentions
@@ -240,11 +293,10 @@ class IntentClassifier {
         }
 
         // If we have context and the prompt is about filtering, check previous severity
-        context?.let { ctx ->
-            if (lowerPrompt.contains(Regex("(filter|show|only|just)")) &&
-                ctx.currentContext["filters"] is Map<*, *>) {
-                val filters = ctx.currentContext["filters"] as Map<*, *>
-                filters["severity"]?.toString()?.let { severity ->
+        context?.currentContext?.get("filters")?.let { filters ->
+            if (filters is Map<*, *>) {
+                val severity = filters["severity"] as? String
+                if (severity != null) {
                     return try {
                         Severity.valueOf(severity.uppercase())
                     } catch (e: IllegalArgumentException) {
@@ -263,7 +315,7 @@ class IntentClassifier {
      * @param context Optional conversation context
      * @return The determined TimeRange, or null if not specified
      */
-    private fun determineTimeRange(prompt: String, context: ConversationContext? = null): TimeRange? {
+    private fun determineTimeRange(prompt: String, context: ModelConversationContext? = null): TimeRange? {
         val lowerPrompt = prompt.lowercase()
 
         // Check for explicit time mentions
@@ -308,18 +360,15 @@ class IntentClassifier {
         }
 
         // If we have context and the prompt is about filtering, check previous time range
-        context?.let { ctx ->
-            if (lowerPrompt.contains(Regex("(filter|show|only|just)")) &&
-                ctx.currentContext["filters"] is Map<*, *>) {
-                val filters = ctx.currentContext["filters"] as Map<*, *>
-                filters["timeRange"]?.toString()?.let { timeRangeStr ->
-                    if (timeRangeStr != "all") {
-                        val (start, end) = timeRangeStr.split(" to ")
-                        return TimeRange(
-                            LocalDateTime.parse(start),
-                            LocalDateTime.parse(end)
-                        )
-                    }
+        context?.currentContext?.get("filters")?.let { filters ->
+            if (filters is Map<*, *>) {
+                val timeRange = filters["timeRange"] as? String
+                if (timeRange != null && timeRange != "all") {
+                    val (start, end) = timeRange.split(" to ")
+                    return TimeRange(
+                        LocalDateTime.parse(start),
+                        LocalDateTime.parse(end)
+                    )
                 }
             }
         }
@@ -333,46 +382,6 @@ class IntentClassifier {
 
     private fun determineAssetId(prompt: String): String? {
         return Regex("asset-\\d+").find(prompt)?.value
-    }
-
-    private fun extractScanId(prompt: String): String? {
-        return Regex("scan-\\d+").find(prompt)?.value
-    }
-
-    private fun extractWebAppId(prompt: String): String? {
-        return Regex("webapp-\\d+").find(prompt)?.value
-    }
-
-    private fun extractContainerId(prompt: String): String? {
-        return Regex("container-\\d+").find(prompt)?.value
-    }
-
-    private fun extractCloudAccountId(prompt: String): String? {
-        return Regex("cloud-\\d+").find(prompt)?.value
-    }
-
-    private fun extractReportId(prompt: String): String? {
-        return Regex("report-\\d+").find(prompt)?.value
-    }
-
-    private fun extractPolicyId(prompt: String): String? {
-        return Regex("policy-\\d+").find(prompt)?.value
-    }
-
-    private fun extractTagId(prompt: String): String? {
-        return Regex("tag-\\d+").find(prompt)?.value
-    }
-
-    private fun extractUserId(prompt: String): String? {
-        return Regex("user-\\d+").find(prompt)?.value
-    }
-
-    private fun extractGroupId(prompt: String): String? {
-        return Regex("group-\\d+").find(prompt)?.value
-    }
-
-    private fun extractPermissionId(prompt: String): String? {
-        return Regex("permission-\\d+").find(prompt)?.value
     }
 
     private fun determineScanStatus(prompt: String): String? {
