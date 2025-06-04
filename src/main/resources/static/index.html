@@ -110,6 +110,10 @@
     </div>
 
     <script>
+        // Initialize chart variables
+        let severityChart = null;
+        let trendChart = null;
+
         // Load current configuration when page loads
         window.onload = function() {
             loadConfig();
@@ -207,67 +211,16 @@
             });
         }
 
-        // Ask a question
-        function askQuestion() {
-            const query = document.getElementById('query').value;
-            const summaryDiv = document.getElementById('summary');
-            const dataTableDiv = document.getElementById('dataTable');
-            const visualizationDiv = document.getElementById('visualization');
-
-            summaryDiv.innerHTML = '<p class="text-gray-500">Processing your request...</p>';
-            dataTableDiv.classList.add('hidden');
-            visualizationDiv.classList.add('hidden');
-
-            fetch('/ask', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    prompt: query
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Display the summary
-                summaryDiv.innerHTML = `<pre class="whitespace-pre-wrap">${data.summary}</pre>`;
-
-                // Handle raw response data
-                if (data.rawResponse) {
-                    const rawData = data.rawResponse;
-                    
-                    // Check if we have vulnerabilities or assets data
-                    if (rawData.vulnerabilities || rawData.assets) {
-                        const tableData = rawData.vulnerabilities || rawData.assets;
-                        if (Array.isArray(tableData) && tableData.length > 0) {
-                            createDataTable(tableData);
-                            dataTableDiv.classList.remove('hidden');
-                        }
-                    }
-
-                    // Create visualizations if we have data
-                    if (rawData.vulnerabilities || rawData.assets) {
-                        createVisualizations(rawData);
-                        visualizationDiv.classList.remove('hidden');
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                summaryDiv.innerHTML = `<p class="text-red-500">Error: ${error.message || 'Could not process the request. Please try again.'}</p>`;
-            });
-        }
-
         // Function to create data visualizations
         function createVisualizations(data) {
             if (!data) return;
 
             // Destroy existing charts if they exist
-            if (window.severityChart) {
-                window.severityChart.destroy();
+            if (severityChart instanceof Chart) {
+                severityChart.destroy();
             }
-            if (window.trendChart) {
-                window.trendChart.destroy();
+            if (trendChart instanceof Chart) {
+                trendChart.destroy();
             }
 
             // Extract data array from either vulnerabilities or assets
@@ -292,7 +245,7 @@
                 }]
             };
 
-            window.severityChart = new Chart(severityCtx, {
+            severityChart = new Chart(severityCtx, {
                 type: 'pie',
                 data: severityData,
                 options: {
@@ -315,7 +268,7 @@
                     return acc;
                 }, {});
 
-                window.trendChart = new Chart(trendCtx, {
+                trendChart = new Chart(trendCtx, {
                     type: 'line',
                     data: {
                         labels: Object.keys(counts),
@@ -382,6 +335,47 @@
             table.appendChild(tbody);
 
             tableContainer.appendChild(table);
+        }
+
+        // Function to ask a question
+        async function askQuestion() {
+            const prompt = document.getElementById('query').value;
+            if (!prompt) return;
+
+            try {
+                const response = await fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ prompt })
+                });
+
+                const data = await response.json();
+                
+                // Display the summary
+                document.getElementById('summary').textContent = data.summary;
+
+                // Clear previous visualizations
+                document.getElementById('dataTable').innerHTML = '';
+                if (severityChart instanceof Chart) {
+                    severityChart.destroy();
+                    severityChart = null;
+                }
+                if (trendChart instanceof Chart) {
+                    trendChart.destroy();
+                    trendChart = null;
+                }
+
+                // Create new visualizations if we have data
+                if (data.rawResponse && !data.rawResponse.error) {
+                    createDataTable(data.rawResponse);
+                    createVisualizations(data.rawResponse);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('summary').textContent = 'Error: Could not process the request. Please try again.';
+            }
         }
     </script>
 </body>
