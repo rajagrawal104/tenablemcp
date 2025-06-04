@@ -253,7 +253,9 @@
 
             // Show loading state
             const responseContainer = document.getElementById('responseContainer');
-            responseContainer.innerHTML = '<div class="text-gray-500">Processing your request...</div>';
+            if (responseContainer) {
+                responseContainer.innerHTML = '<div class="text-gray-500">Processing your request...</div>';
+            }
 
             try {
                 const response = await fetch('/ask', {
@@ -297,7 +299,7 @@
                 }
 
                 // Show download button if CSV was requested
-                if (query.toLowerCase().includes('csv')) {
+                if (query.toLowerCase().includes('csv') && responseContainer) {
                     const downloadButton = document.createElement('button');
                     downloadButton.className = 'mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600';
                     downloadButton.textContent = 'Download CSV';
@@ -321,13 +323,25 @@
             }
 
             // Clear containers
-            document.getElementById('severityChart').innerHTML = '';
-            document.getElementById('trendChart').innerHTML = '';
-            document.getElementById('dataTable').innerHTML = '';
+            const severityChartElement = document.getElementById('severityChart');
+            const trendChartElement = document.getElementById('trendChart');
+            const dataTableElement = document.getElementById('dataTable');
+
+            if (severityChartElement) severityChartElement.innerHTML = '';
+            if (trendChartElement) trendChartElement.innerHTML = '';
+            if (dataTableElement) dataTableElement.innerHTML = '';
         }
 
         function createVisualizations(data) {
             if (!data || !Array.isArray(data)) return;
+
+            const severityChartElement = document.getElementById('severityChart');
+            const trendChartElement = document.getElementById('trendChart');
+
+            if (!severityChartElement || !trendChartElement) {
+                console.error('Chart elements not found');
+                return;
+            }
 
             // Extract data for charts
             const severityData = {};
@@ -344,7 +358,7 @@
             });
 
             // Create severity chart
-            const severityCtx = document.getElementById('severityChart').getContext('2d');
+            const severityCtx = severityChartElement.getContext('2d');
             severityChart = new Chart(severityCtx, {
                 type: 'pie',
                 data: {
@@ -371,7 +385,7 @@
             });
 
             // Create trend chart
-            const trendCtx = document.getElementById('trendChart').getContext('2d');
+            const trendCtx = trendChartElement.getContext('2d');
             trendChart = new Chart(trendCtx, {
                 type: 'line',
                 data: {
@@ -399,6 +413,11 @@
             if (!data || !Array.isArray(data) || data.length === 0) return;
 
             const tableContainer = document.getElementById('dataTable');
+            if (!tableContainer) {
+                console.error('Data table container not found');
+                return;
+            }
+
             const table = document.createElement('table');
             table.className = 'min-w-full divide-y divide-gray-200';
 
