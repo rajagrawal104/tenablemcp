@@ -95,6 +95,18 @@ class McpController(
                         )
                     )
                 }
+                Action.LIST_SCANS -> {
+                    val response = tenableClient.listScans(
+                        timeRange = intent.timeRange
+                    )
+                    mapOf(
+                        "scans" to (response["scans"] as? List<Map<String, Any>> ?: emptyList()),
+                        "action" to "list_scans",
+                        "filters" to mapOf(
+                            "timeRange" to (intent.timeRange?.let { "${it.start} to ${it.end}" } ?: "all")
+                        )
+                    )
+                }
                 Action.EXPORT_VULNERABILITIES, Action.EXPORT_ASSETS -> {
                     val response = tenableClient.exportReport(
                         timeRange = intent.timeRange
@@ -156,6 +168,24 @@ class McpController(
                         appendLine("Time range: ${it.start} to ${it.end}")
                     }
                     intent.assetId?.let { appendLine("Asset ID: $it") }
+                }
+            }
+            Action.LIST_SCANS -> {
+                val scans = response["scans"] as? List<Map<String, Any>>
+                buildString {
+                    appendLine("Found ${scans?.size ?: 0} scans")
+                    intent.timeRange?.let { 
+                        appendLine("Time range: ${it.start} to ${it.end}")
+                    }
+                    // Add scan status summary if available
+                    scans?.let { scanList ->
+                        val statusCounts = scanList.groupBy { it["status"] as? String ?: "Unknown" }
+                            .mapValues { it.value.size }
+                        appendLine("\nScan Status Summary:")
+                        statusCounts.forEach { (status, count) ->
+                            appendLine("$status: $count")
+                        }
+                    }
                 }
             }
             Action.EXPORT_VULNERABILITIES, Action.EXPORT_ASSETS -> {

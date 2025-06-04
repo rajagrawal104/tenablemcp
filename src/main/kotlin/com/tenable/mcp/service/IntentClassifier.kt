@@ -25,7 +25,8 @@ data class Intent(
     val tagId: String? = null,      // Optional tag ID
     val userId: String? = null,     // Optional user ID
     val groupId: String? = null,    // Optional group ID
-    val permissionId: String? = null // Optional permission ID
+    val permissionId: String? = null, // Optional permission ID
+    val scanStatus: String? = null   // Optional scan status
 )
 
 // Enum defining possible actions that can be performed
@@ -134,6 +135,28 @@ data class TimeRange(
 
 @Service
 class IntentClassifier {
+    private val actionPatterns = mapOf(
+        "list" to listOf(
+            "show", "list", "display", "get", "find", "search", "query",
+            "what are", "what is", "tell me about", "give me"
+        ),
+        "export" to listOf(
+            "export", "download", "save", "get csv", "get excel",
+            "download as", "save as", "export as"
+        ),
+        "scan" to listOf(
+            "scan", "run scan", "start scan", "initiate scan",
+            "perform scan", "execute scan", "launch scan"
+        )
+    )
+
+    private val scanStatusPatterns = mapOf(
+        "completed" to listOf("completed", "finished", "done", "successful"),
+        "running" to listOf("running", "in progress", "active", "ongoing"),
+        "failed" to listOf("failed", "error", "unsuccessful", "stopped"),
+        "scheduled" to listOf("scheduled", "planned", "queued", "pending")
+    )
+
     /**
      * Analyze a user prompt to determine their intent
      * @param prompt The user's natural language prompt
@@ -146,13 +169,15 @@ class IntentClassifier {
         val timeRange = determineTimeRange(prompt, context)
         val cveId = determineCveId(prompt)
         val assetId = determineAssetId(prompt)
+        val scanStatus = determineScanStatus(prompt)
 
         return Intent(
             action = action,
             severity = severity,
             timeRange = timeRange,
             cveId = cveId,
-            assetId = assetId
+            assetId = assetId,
+            scanStatus = scanStatus
         )
     }
 
@@ -162,41 +187,34 @@ class IntentClassifier {
      * @param context Optional conversation context
      * @return The determined Action
      */
-    private fun determineAction(prompt: String, context: ConversationContext? = null): Action {
+    private fun determineAction(prompt: String, context: ConversationContext?): Action {
         val lowerPrompt = prompt.lowercase()
+        
+        // Check for scan-related actions first
+        if (actionPatterns["scan"]?.any { it in lowerPrompt } == true) {
+            return Action.START_SCAN
+        }
 
-        // Check for export requests
-        if (lowerPrompt.contains(Regex("(export|download|save|get csv)"))) {
-            return if (lowerPrompt.contains(Regex("(vulnerabilit|vuln|issue|finding)"))) {
-                Action.EXPORT_VULNERABILITIES
-            } else if (lowerPrompt.contains(Regex("(asset|host|device)"))) {
-                Action.EXPORT_ASSETS
-            } else {
-                Action.EXPORT_VULNERABILITIES // Default to vulnerabilities
+        // Check for export actions
+        if (actionPatterns["export"]?.any { it in lowerPrompt } == true) {
+            return if ("asset" in lowerPrompt) Action.EXPORT_ASSETS else Action.EXPORT_VULNERABILITIES
+        }
+
+        // Check for list actions
+        if (actionPatterns["list"]?.any { it in lowerPrompt } == true) {
+            return when {
+                "scan" in lowerPrompt -> Action.LIST_SCANS
+                "asset" in lowerPrompt -> Action.LIST_ASSETS
+                else -> Action.LIST_VULNERABILITIES
             }
         }
 
-        // Check for asset-related queries
-        if (lowerPrompt.contains(Regex("(asset|host|device)"))) {
-            return Action.LIST_ASSETS
-        }
-
-        // Check for vulnerability-related queries
-        if (lowerPrompt.contains(Regex("(vulnerabilit|vuln|issue|finding)"))) {
-            return Action.LIST_VULNERABILITIES
-        }
-
-        // If we have context, try to infer from previous action
-        context?.let { ctx ->
-            // If the last action was listing vulnerabilities and the prompt is about filtering
-            if (ctx.currentContext["lastAction"] == "list_vulnerabilities" &&
-                lowerPrompt.contains(Regex("(filter|show|only|just)"))) {
-                return Action.LIST_VULNERABILITIES
-            }
-            // If the last action was listing assets and the prompt is about filtering
-            if (ctx.currentContext["lastAction"] == "list_assets" &&
-                lowerPrompt.contains(Regex("(filter|show|only|just)"))) {
-                return Action.LIST_ASSETS
+        // Use context if available
+        context?.let {
+            return when (it.currentContext["lastAction"]) {
+                "list_scans" -> Action.LIST_SCANS
+                "list_assets" -> Action.LIST_ASSETS
+                else -> Action.LIST_VULNERABILITIES
             }
         }
 
@@ -355,5 +373,12 @@ class IntentClassifier {
 
     private fun extractPermissionId(prompt: String): String? {
         return Regex("permission-\\d+").find(prompt)?.value
+    }
+
+    private fun determineScanStatus(prompt: String): String? {
+        val lowerPrompt = prompt.lowercase()
+        return scanStatusPatterns.entries.firstOrNull { (_, patterns) ->
+            patterns.any { it in lowerPrompt }
+        }?.key
     }
 } 

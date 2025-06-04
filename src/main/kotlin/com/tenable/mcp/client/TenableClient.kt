@@ -164,4 +164,94 @@ class TenableClient(private val config: TenableConfig) {
     private fun Map<String, String>.toQueryString(): String {
         return entries.joinToString("&") { "${it.key}=${it.value}" }
     }
+
+    fun listScans(timeRange: TimeRange? = null): Map<String, Any> {
+        val url = "${config.baseUrl.trimEnd('/')}/scans"
+        val headers = getHeaders()
+        
+        val response = client.get(url) {
+            headers { headers.forEach { (key, value) -> append(key, value) } }
+            parameter("filter", "last_modification_date:${timeRange?.start ?: "0"}")
+        }
+
+        return if (response.status.isSuccess()) {
+            val scans = response.body<Map<String, Any>>()["scans"] as? List<Map<String, Any>> ?: emptyList()
+            mapOf("scans" to scans)
+        } else {
+            mapOf("error" to "Failed to list scans: ${response.status}")
+        }
+    }
+
+    fun startScan(scanId: String? = null): Map<String, Any> {
+        val url = if (scanId != null) {
+            "${config.baseUrl.trimEnd('/')}/scans/$scanId/launch"
+        } else {
+            "${config.baseUrl.trimEnd('/')}/scans"
+        }
+        val headers = getHeaders()
+        
+        val response = if (scanId != null) {
+            client.post(url) {
+                headers { headers.forEach { (key, value) -> append(key, value) } }
+            }
+        } else {
+            client.post(url) {
+                headers { headers.forEach { (key, value) -> append(key, value) } }
+                contentType(okhttp3.MediaType.parse("application/json"))
+                setBody(mapOf(
+                    "name" to "MCP Automated Scan",
+                    "targets" to "default",
+                    "enabled" to true,
+                    "schedule" to mapOf(
+                        "type" to "once",
+                        "start_time" to System.currentTimeMillis()
+                    )
+                ))
+            }
+        }
+
+        return if (response.status.isSuccess()) {
+            val scanUuid = response.body<Map<String, Any>>()["scan_uuid"] as? String
+            mapOf(
+                "success" to true,
+                "scan_uuid" to scanUuid,
+                "message" to "Scan started successfully"
+            )
+        } else {
+            mapOf(
+                "error" to "Failed to start scan: ${response.status}",
+                "success" to false
+            )
+        }
+    }
+
+    fun getScanStatus(scanId: String): Map<String, Any> {
+        val url = "${config.baseUrl.trimEnd('/')}/scans/$scanId"
+        val headers = getHeaders()
+        
+        val response = client.get(url) {
+            headers { headers.forEach { (key, value) -> append(key, value) } }
+        }
+
+        return if (response.status.isSuccess()) {
+            val scanInfo = response.body<Map<String, Any>>()
+            mapOf(
+                "status" to (scanInfo["status"] as? String ?: "unknown"),
+                "scan_details" to scanInfo
+            )
+        } else {
+            mapOf(
+                "error" to "Failed to get scan status: ${response.status}",
+                "status" to "error"
+            )
+        }
+    }
+
+    private fun getHeaders(): okhttp3.Headers {
+        val headers = okhttp3.Headers.Builder()
+        headers.add("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
+        headers.add("Accept", "application/json")
+        headers.add("Content-Type", "application/json")
+        return headers.build()
+    }
 } 
