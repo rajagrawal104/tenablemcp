@@ -125,13 +125,33 @@
         // Load current configuration
         function loadConfig() {
             fetch('/config')
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('Config data:', data); // Debug log
                     if (data.success) {
                         const config = data.config;
-                        if (config.hasAccessKey) document.getElementById('accessKey').value = '********';
-                        if (config.hasSecretKey) document.getElementById('secretKey').value = '********';
-                        document.getElementById('baseUrl').value = config.baseUrl || 'https://cloud.tenable.com';
+                        const accessKeyInput = document.getElementById('accessKey');
+                        const secretKeyInput = document.getElementById('secretKey');
+                        const baseUrlInput = document.getElementById('baseUrl');
+
+                        if (accessKeyInput && config.hasAccessKey) {
+                            accessKeyInput.value = '********';
+                            accessKeyInput.setAttribute('data-has-value', 'true');
+                        }
+                        if (secretKeyInput && config.hasSecretKey) {
+                            secretKeyInput.value = '********';
+                            secretKeyInput.setAttribute('data-has-value', 'true');
+                        }
+                        if (baseUrlInput) {
+                            baseUrlInput.value = config.baseUrl || 'https://cloud.tenable.com';
+                        }
+                    } else {
+                        console.error('Failed to load configuration:', data.message);
                     }
                 })
                 .catch(error => {
@@ -141,22 +161,36 @@
 
         // Save API configuration
         function saveConfig() {
-            const accessKey = document.getElementById('accessKey').value;
-            const secretKey = document.getElementById('secretKey').value;
-            const baseUrl = document.getElementById('baseUrl').value;
+            const accessKeyInput = document.getElementById('accessKey');
+            const secretKeyInput = document.getElementById('secretKey');
+            const baseUrlInput = document.getElementById('baseUrl');
+
+            // Only send keys if they've been changed (not asterisks)
+            const accessKey = accessKeyInput.getAttribute('data-has-value') === 'true' ? null : accessKeyInput.value;
+            const secretKey = secretKeyInput.getAttribute('data-has-value') === 'true' ? null : secretKeyInput.value;
+            const baseUrl = baseUrlInput.value;
+
+            const configData = {
+                baseUrl: baseUrl
+            };
+
+            // Only include keys if they've been changed
+            if (accessKey) configData.accessKey = accessKey;
+            if (secretKey) configData.secretKey = secretKey;
 
             fetch('/config', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    accessKey: accessKey,
-                    secretKey: secretKey,
-                    baseUrl: baseUrl
-                })
+                body: JSON.stringify(configData)
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     alert('Configuration saved successfully!');
@@ -490,6 +524,28 @@
             };
             document.getElementById('conversationContainer').innerHTML = '';
             clearVisualizations();
+        });
+
+        // Add event listeners for key inputs
+        document.addEventListener('DOMContentLoaded', function() {
+            const accessKeyInput = document.getElementById('accessKey');
+            const secretKeyInput = document.getElementById('secretKey');
+
+            if (accessKeyInput) {
+                accessKeyInput.addEventListener('input', function() {
+                    if (this.value !== '********') {
+                        this.removeAttribute('data-has-value');
+                    }
+                });
+            }
+
+            if (secretKeyInput) {
+                secretKeyInput.addEventListener('input', function() {
+                    if (this.value !== '********') {
+                        this.removeAttribute('data-has-value');
+                    }
+                });
+            }
         });
     </script>
 </body>
