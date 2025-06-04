@@ -85,12 +85,12 @@ class TenableClient(
      * List assets matching the specified criteria
      * @param timeRange Optional time range filter
      * @param assetId Optional asset ID filter
-     * @return Map containing the API response
+     * @return List of asset maps
      */
     fun listAssets(
         timeRange: TimeRange? = null,
         assetId: String? = null
-    ): Map<String, Any> {
+    ): List<Map<String, Any>> {
         val queryParams = mutableMapOf<String, String>()
         
         // Add optional filters to query parameters
@@ -106,7 +106,8 @@ class TenableClient(
             .get()
             .build()
 
-        return executeRequest(request)
+        val response = executeRequest(request)
+        return (response["assets"] as? List<Map<String, Any>>) ?: emptyList()
     }
 
     /**

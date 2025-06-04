@@ -13,8 +13,7 @@ class ExportService(private val tenableClient: TenableClient) {
      * Export vulnerabilities as CSV
      */
     fun exportVulnerabilitiesCsv(timeRange: TimeRange? = null): ByteArray {
-        val vulnerabilities = tenableClient.listVulnerabilities(timeRange = timeRange)
-        val vulns = vulnerabilities["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()
+        val vulns = tenableClient.listVulnerabilities(timeRange = timeRange)
 
         return buildString {
             // Write header
