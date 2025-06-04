@@ -46,11 +46,11 @@ if [ ! -r "$GRADLE_DIST_DIR/$GRADLE_DIST_FILE" ]; then
     exit 1
 fi
 
-# Update gradle-wrapper.properties to use local distribution
+# Update gradle-wrapper.properties to use local distribution with absolute path
 cat > "$GRADLE_DIST_DIR/gradle-wrapper.properties" << EOL
 distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
-distributionUrl=file\:///\${projectDir}/gradle/wrapper/${GRADLE_DIST_FILE}
+distributionUrl=file\://$CURRENT_DIR/$GRADLE_DIST_DIR/$GRADLE_DIST_FILE
 networkTimeout=10000
 validateDistributionUrl=true
 zipStoreBase=GRADLE_USER_HOME
