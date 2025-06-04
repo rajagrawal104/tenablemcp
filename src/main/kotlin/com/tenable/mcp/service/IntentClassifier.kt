@@ -3,6 +3,9 @@ package com.tenable.mcp.service
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAdjusters
+import java.time.temporal.Duration
+import java.time.DayOfWeek
 
 // Data class representing the extracted intent from a user prompt
 data class Intent(
@@ -131,227 +134,185 @@ data class TimeRange(
 @Service
 class IntentClassifier {
     /**
-     * Analyzes a user prompt and extracts the intent and relevant parameters
+     * Analyze a user prompt to determine their intent
      * @param prompt The user's natural language prompt
-     * @return Intent object containing the extracted information
+     * @param context Optional conversation context
+     * @return Intent object containing the extracted action and parameters
      */
-    fun classifyIntent(prompt: String): Intent {
-        val lowerPrompt = prompt.lowercase()
-        
-        // Determine the main action based on keywords in the prompt
-        val (action, subAction) = determineAction(lowerPrompt)
-        
-        // Extract severity level if mentioned in the prompt
-        val severity = extractSeverity(lowerPrompt)
-        
-        // Extract time range if specified
-        val timeRange = extractTimeRange(lowerPrompt)
-        
-        // Extract various IDs from the prompt
-        val cveId = extractCveId(lowerPrompt)
-        val assetId = extractAssetId(lowerPrompt)
-        val scanId = extractScanId(lowerPrompt)
-        val webAppId = extractWebAppId(lowerPrompt)
-        val containerId = extractContainerId(lowerPrompt)
-        val cloudAccountId = extractCloudAccountId(lowerPrompt)
-        val reportId = extractReportId(lowerPrompt)
-        val policyId = extractPolicyId(lowerPrompt)
-        val tagId = extractTagId(lowerPrompt)
-        val userId = extractUserId(lowerPrompt)
-        val groupId = extractGroupId(lowerPrompt)
-        val permissionId = extractPermissionId(lowerPrompt)
+    fun classifyIntent(prompt: String, context: ConversationContext? = null): Intent {
+        val action = determineAction(prompt, context)
+        val severity = determineSeverity(prompt, context)
+        val timeRange = determineTimeRange(prompt, context)
+        val cveId = determineCveId(prompt)
+        val assetId = determineAssetId(prompt)
 
         return Intent(
             action = action,
-            subAction = subAction,
             severity = severity,
             timeRange = timeRange,
             cveId = cveId,
-            assetId = assetId,
-            scanId = scanId,
-            webAppId = webAppId,
-            containerId = containerId,
-            cloudAccountId = cloudAccountId,
-            reportId = reportId,
-            policyId = policyId,
-            tagId = tagId,
-            userId = userId,
-            groupId = groupId,
-            permissionId = permissionId
+            assetId = assetId
         )
     }
 
-    private fun determineAction(prompt: String): Pair<Action, SubAction?> {
-        // First determine the main action
-        val action = when {
-            // Vulnerability Management
-            prompt.contains(Regex("(vulnerabilit|vuln|issue|finding)")) -> {
-                when {
-                    prompt.contains(Regex("(export|download)")) -> Action.EXPORT_VULNERABILITIES
-                    prompt.contains(Regex("(detail|info|about)")) -> Action.GET_VULNERABILITY
-                    else -> Action.LIST_VULNERABILITIES
-                }
+    /**
+     * Determine the action from the prompt
+     * @param prompt The user's prompt
+     * @param context Optional conversation context
+     * @return The determined Action
+     */
+    private fun determineAction(prompt: String, context: ConversationContext? = null): Action {
+        val lowerPrompt = prompt.lowercase()
+
+        // Check for export requests
+        if (lowerPrompt.contains(Regex("(export|download|save|get csv)"))) {
+            return if (lowerPrompt.contains(Regex("(vulnerabilit|vuln|issue|finding)"))) {
+                Action.EXPORT_VULNERABILITIES
+            } else if (lowerPrompt.contains(Regex("(asset|host|device)"))) {
+                Action.EXPORT_ASSETS
+            } else {
+                Action.EXPORT_VULNERABILITIES // Default to vulnerabilities
             }
-            // Asset Management
-            prompt.contains(Regex("(asset|host|device)")) -> {
-                when {
-                    prompt.contains(Regex("(export|download)")) -> Action.EXPORT_ASSETS
-                    prompt.contains(Regex("(detail|info|about)")) -> Action.GET_ASSET
-                    else -> Action.LIST_ASSETS
-                }
-            }
-            // Scan Management
-            prompt.contains(Regex("(scan|scanner)")) -> {
-                when {
-                    prompt.contains(Regex("(create|new|start)")) -> Action.CREATE_SCAN
-                    prompt.contains(Regex("(launch|run|execute)")) -> Action.LAUNCH_SCAN
-                    prompt.contains(Regex("(status|progress)")) -> Action.GET_SCAN_STATUS
-                    prompt.contains(Regex("(detail|info|about)")) -> Action.GET_SCAN
-                    else -> Action.LIST_SCANS
-                }
-            }
-            // Web App Scanning
-            prompt.contains(Regex("(web app|webapp|website)")) -> {
-                when {
-                    prompt.contains(Regex("(create|new|start)")) -> Action.CREATE_WEB_APP_SCAN
-                    prompt.contains(Regex("(status|progress)")) -> Action.GET_WEB_APP_SCAN_STATUS
-                    prompt.contains(Regex("(detail|info|about)")) -> Action.GET_WEB_APP
-                    else -> Action.LIST_WEB_APPS
-                }
-            }
-            // Container Security
-            prompt.contains(Regex("(container|docker)")) -> {
-                when {
-                    prompt.contains(Regex("(vulnerabilit|vuln|issue)")) -> Action.GET_CONTAINER_VULNERABILITIES
-                    prompt.contains(Regex("(detail|info|about)")) -> Action.GET_CONTAINER
-                    else -> Action.LIST_CONTAINERS
-                }
-            }
-            // Cloud Security
-            prompt.contains(Regex("(cloud|aws|azure|gcp)")) -> {
-                when {
-                    prompt.contains(Regex("(vulnerabilit|vuln|issue)")) -> Action.GET_CLOUD_VULNERABILITIES
-                    prompt.contains(Regex("(detail|info|about)")) -> Action.GET_CLOUD_ACCOUNT
-                    else -> Action.LIST_CLOUD_ACCOUNTS
-                }
-            }
-            // Report Management
-            prompt.contains(Regex("(report|export)")) -> {
-                when {
-                    prompt.contains(Regex("(create|new|generate)")) -> Action.CREATE_REPORT
-                    prompt.contains(Regex("(download|get)")) -> Action.DOWNLOAD_REPORT
-                    prompt.contains(Regex("(status|progress)")) -> Action.GET_REPORT_STATUS
-                    prompt.contains(Regex("(detail|info|about)")) -> Action.GET_REPORT
-                    else -> Action.LIST_REPORTS
-                }
-            }
-            // Policy Management
-            prompt.contains(Regex("(policy|policies)")) -> {
-                when {
-                    prompt.contains(Regex("(create|new)")) -> Action.CREATE_POLICY
-                    prompt.contains(Regex("(update|modify|change)")) -> Action.UPDATE_POLICY
-                    prompt.contains(Regex("(detail|info|about)")) -> Action.GET_POLICY
-                    else -> Action.LIST_POLICIES
-                }
-            }
-            // Tag Management
-            prompt.contains(Regex("(tag|tags)")) -> {
-                when {
-                    prompt.contains(Regex("(create|new|add)")) -> Action.CREATE_TAG
-                    prompt.contains(Regex("(update|modify|change)")) -> Action.UPDATE_TAG
-                    prompt.contains(Regex("(delete|remove)")) -> Action.DELETE_TAG
-                    else -> Action.LIST_TAGS
-                }
-            }
-            // User Management
-            prompt.contains(Regex("(user|users)")) -> {
-                when {
-                    prompt.contains(Regex("(create|new|add)")) -> Action.CREATE_USER
-                    prompt.contains(Regex("(update|modify|change)")) -> Action.UPDATE_USER
-                    prompt.contains(Regex("(detail|info|about)")) -> Action.GET_USER
-                    else -> Action.LIST_USERS
-                }
-            }
-            // Group Management
-            prompt.contains(Regex("(group|groups)")) -> {
-                when {
-                    prompt.contains(Regex("(create|new|add)")) -> Action.CREATE_GROUP
-                    prompt.contains(Regex("(update|modify|change)")) -> Action.UPDATE_GROUP
-                    prompt.contains(Regex("(detail|info|about)")) -> Action.GET_GROUP
-                    else -> Action.LIST_GROUPS
-                }
-            }
-            // Access Control
-            prompt.contains(Regex("(permission|permissions)")) -> {
-                when {
-                    prompt.contains(Regex("(create|new|add)")) -> Action.CREATE_PERMISSION
-                    prompt.contains(Regex("(update|modify|change)")) -> Action.UPDATE_PERMISSION
-                    prompt.contains(Regex("(detail|info|about)")) -> Action.GET_PERMISSION
-                    else -> Action.LIST_PERMISSIONS
-                }
-            }
-            // System Status
-            prompt.contains(Regex("(status|health|system)")) -> {
-                when {
-                    prompt.contains(Regex("(api|endpoint)")) -> Action.GET_API_STATUS
-                    else -> Action.GET_SYSTEM_STATUS
-                }
-            }
-            else -> Action.UNKNOWN
         }
 
-        // Then determine the sub-action if applicable
-        val subAction = when {
-            prompt.contains(Regex("(create|new|add)")) -> SubAction.CREATE
-            prompt.contains(Regex("(update|modify|change)")) -> SubAction.UPDATE
-            prompt.contains(Regex("(delete|remove)")) -> SubAction.DELETE
-            prompt.contains(Regex("(export|download)")) -> SubAction.EXPORT
-            prompt.contains(Regex("(launch|run|execute)")) -> SubAction.LAUNCH
-            prompt.contains(Regex("(status|progress)")) -> SubAction.STATUS
-            else -> null
+        // Check for asset-related queries
+        if (lowerPrompt.contains(Regex("(asset|host|device)"))) {
+            return Action.LIST_ASSETS
         }
 
-        return Pair(action, subAction)
+        // Check for vulnerability-related queries
+        if (lowerPrompt.contains(Regex("(vulnerabilit|vuln|issue|finding)"))) {
+            return Action.LIST_VULNERABILITIES
+        }
+
+        // If we have context, try to infer from previous action
+        context?.let {
+            // If the last action was listing vulnerabilities and the prompt is about filtering
+            if (it.currentContext["lastAction"] == "list_vulnerabilities" &&
+                lowerPrompt.contains(Regex("(filter|show|only|just)"))) {
+                return Action.LIST_VULNERABILITIES
+            }
+            // If the last action was listing assets and the prompt is about filtering
+            if (it.currentContext["lastAction"] == "list_assets" &&
+                lowerPrompt.contains(Regex("(filter|show|only|just)"))) {
+                return Action.LIST_ASSETS
+            }
+        }
+
+        // Default to listing vulnerabilities
+        return Action.LIST_VULNERABILITIES
     }
 
-    private fun extractSeverity(prompt: String): Severity? {
-        return when {
-            prompt.contains(Regex("(critical|crit)")) -> Severity.CRITICAL
-            prompt.contains(Regex("(high|severe)")) -> Severity.HIGH
-            prompt.contains(Regex("(medium|moderate)")) -> Severity.MEDIUM
-            prompt.contains(Regex("(low|minor)")) -> Severity.LOW
-            else -> null
+    /**
+     * Determine the severity from the prompt
+     * @param prompt The user's prompt
+     * @param context Optional conversation context
+     * @return The determined Severity, or null if not specified
+     */
+    private fun determineSeverity(prompt: String, context: ConversationContext? = null): Severity? {
+        val lowerPrompt = prompt.lowercase()
+
+        // Check for explicit severity mentions
+        when {
+            lowerPrompt.contains(Regex("(critical|severe|urgent)")) -> return Severity.CRITICAL
+            lowerPrompt.contains(Regex("(high|important)")) -> return Severity.HIGH
+            lowerPrompt.contains(Regex("(medium|moderate)")) -> return Severity.MEDIUM
+            lowerPrompt.contains(Regex("(low|minor)")) -> return Severity.LOW
         }
+
+        // If we have context and the prompt is about filtering, check previous severity
+        context?.let {
+            if (lowerPrompt.contains(Regex("(filter|show|only|just)")) &&
+                it.currentContext["filters"] is Map<*, *>) {
+                val filters = it.currentContext["filters"] as Map<*, *>
+                filters["severity"]?.toString()?.let { severity ->
+                    return try {
+                        Severity.valueOf(severity.uppercase())
+                    } catch (e: IllegalArgumentException) {
+                        null
+                    }
+                }
+            }
+        }
+
+        return null
     }
 
-    private fun extractTimeRange(prompt: String): TimeRange? {
+    /**
+     * Determine the time range from the prompt
+     * @param prompt The user's prompt
+     * @param context Optional conversation context
+     * @return The determined TimeRange, or null if not specified
+     */
+    private fun determineTimeRange(prompt: String, context: ConversationContext? = null): TimeRange? {
+        val lowerPrompt = prompt.lowercase()
+
+        // Check for explicit time mentions
         val now = LocalDateTime.now()
-        
-        return when {
-            // Match patterns like "last 7 days" or "past 3 days"
-            prompt.contains(Regex("(last|past) (\\d+) (day|days)")) -> {
-                val days = Regex("(\\d+)").find(prompt)?.value?.toIntOrNull() ?: 7
-                TimeRange(now.minus(days.toLong(), ChronoUnit.DAYS), now)
+        when {
+            lowerPrompt.contains(Regex("(last|past|previous)\\s+(\\d+)\\s+(day|week|month|year)")) -> {
+                val matcher = Regex("(\\d+)\\s+(day|week|month|year)").find(lowerPrompt)
+                if (matcher != null) {
+                    val (amount, unit) = matcher.destructured
+                    val duration = when (unit) {
+                        "day" -> Duration.ofDays(amount.toLong())
+                        "week" -> Duration.ofDays(amount.toLong() * 7)
+                        "month" -> Duration.ofDays(amount.toLong() * 30)
+                        "year" -> Duration.ofDays(amount.toLong() * 365)
+                        else -> return null
+                    }
+                    return TimeRange(now.minus(duration), now)
+                }
             }
-            // Match patterns like "last 2 weeks" or "past 1 week"
-            prompt.contains(Regex("(last|past) (\\d+) (week|weeks)")) -> {
-                val weeks = Regex("(\\d+)").find(prompt)?.value?.toIntOrNull() ?: 1
-                TimeRange(now.minus(weeks.toLong() * 7, ChronoUnit.DAYS), now)
+            lowerPrompt.contains(Regex("(today|yesterday|this week|this month|this year)")) -> {
+                return when {
+                    lowerPrompt.contains("today") -> TimeRange(now.truncatedTo(ChronoUnit.DAYS), now)
+                    lowerPrompt.contains("yesterday") -> {
+                        val yesterday = now.minusDays(1)
+                        TimeRange(yesterday.truncatedTo(ChronoUnit.DAYS), yesterday.plusDays(1).truncatedTo(ChronoUnit.DAYS))
+                    }
+                    lowerPrompt.contains("this week") -> {
+                        val weekStart = now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                        TimeRange(weekStart.truncatedTo(ChronoUnit.DAYS), now)
+                    }
+                    lowerPrompt.contains("this month") -> {
+                        val monthStart = now.with(TemporalAdjusters.firstDayOfMonth())
+                        TimeRange(monthStart.truncatedTo(ChronoUnit.DAYS), now)
+                    }
+                    lowerPrompt.contains("this year") -> {
+                        val yearStart = now.with(TemporalAdjusters.firstDayOfYear())
+                        TimeRange(yearStart.truncatedTo(ChronoUnit.DAYS), now)
+                    }
+                    else -> null
+                }
             }
-            // Match patterns like "last 3 months" or "past 1 month"
-            prompt.contains(Regex("(last|past) (\\d+) (month|months)")) -> {
-                val months = Regex("(\\d+)").find(prompt)?.value?.toIntOrNull() ?: 1
-                TimeRange(now.minus(months.toLong(), ChronoUnit.MONTHS), now)
-            }
-            else -> null
         }
+
+        // If we have context and the prompt is about filtering, check previous time range
+        context?.let {
+            if (lowerPrompt.contains(Regex("(filter|show|only|just)")) &&
+                it.currentContext["filters"] is Map<*, *>) {
+                val filters = it.currentContext["filters"] as Map<*, *>
+                filters["timeRange"]?.toString()?.let { timeRangeStr ->
+                    if (timeRangeStr != "all") {
+                        val (start, end) = timeRangeStr.split(" to ")
+                        return TimeRange(
+                            LocalDateTime.parse(start),
+                            LocalDateTime.parse(end)
+                        )
+                    }
+                }
+            }
+        }
+
+        return null
     }
 
-    private fun extractCveId(prompt: String): String? {
+    private fun determineCveId(prompt: String): String? {
         return Regex("CVE-\\d{4}-\\d+").find(prompt)?.value
     }
 
-    private fun extractAssetId(prompt: String): String? {
+    private fun determineAssetId(prompt: String): String? {
         return Regex("asset-\\d+").find(prompt)?.value
     }
 

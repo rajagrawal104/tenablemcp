@@ -64,7 +64,7 @@
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Your Question</label>
-                        <textarea id="query" rows="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Example: Show me critical vulnerabilities from the last 7 days"></textarea>
+                        <textarea id="query" rows="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Ask a question or continue the conversation..."></textarea>
                     </div>
                     <div>
                         <button onclick="askQuestion()" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
@@ -110,14 +110,66 @@
     </div>
 
     <script>
-        // Initialize chart variables
+        // Initialize chart variables and conversation state
         let severityChart = null;
         let trendChart = null;
+        let conversationHistory = [];
+        let currentContext = {
+            lastAction: null,
+            lastData: null,
+            filters: {}
+        };
 
         // Load current configuration when page loads
         window.onload = function() {
             loadConfig();
+            initializeConversation();
         };
+
+        // Initialize conversation UI
+        function initializeConversation() {
+            const conversationDiv = document.createElement('div');
+            conversationDiv.id = 'conversation';
+            conversationDiv.className = 'mt-6 space-y-4';
+            
+            // Add conversation container before the query section
+            const querySection = document.querySelector('.bg-white.shadow.rounded-lg.p-6');
+            querySection.parentNode.insertBefore(conversationDiv, querySection);
+
+            // Update the query section to be more conversational
+            const queryInput = document.getElementById('query');
+            queryInput.placeholder = "Ask a question or continue the conversation...";
+            queryInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    askQuestion();
+                }
+            });
+        }
+
+        // Add a message to the conversation
+        function addMessage(content, type = 'user') {
+            const conversationDiv = document.getElementById('conversation');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${type === 'user' ? 'justify-end' : 'justify-start'}`;
+            
+            const messageBubble = document.createElement('div');
+            messageBubble.className = `max-w-3xl rounded-lg px-4 py-2 ${
+                type === 'user' 
+                    ? 'bg-indigo-600 text-white' 
+                    : 'bg-gray-100 text-gray-900'
+            }`;
+            
+            if (type === 'assistant') {
+                messageBubble.innerHTML = `<div class="prose">${content}</div>`;
+            } else {
+                messageBubble.textContent = content;
+            }
+            
+            messageDiv.appendChild(messageBubble);
+            conversationDiv.appendChild(messageDiv);
+            conversationDiv.scrollTop = conversationDiv.scrollHeight;
+        }
 
         // Load current configuration
         function loadConfig() {
@@ -297,27 +349,57 @@
             const prompt = document.getElementById('query').value;
             if (!prompt) return;
 
+            // Add user message to conversation
+            addMessage(prompt, 'user');
+            
+            // Clear input
+            document.getElementById('query').value = '';
+
             const summaryDiv = document.getElementById('summary');
             const dataTableDiv = document.getElementById('dataTable');
             const visualizationDiv = document.getElementById('visualization');
 
             try {
-                summaryDiv.innerHTML = '<p class="text-gray-500">Processing your request...</p>';
-                dataTableDiv.classList.add('hidden');
-                visualizationDiv.classList.add('hidden');
+                // Add context to the request
+                const request = {
+                    prompt,
+                    context: {
+                        history: conversationHistory,
+                        currentContext
+                    }
+                };
 
                 const response = await fetch('/ask', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ prompt })
+                    body: JSON.stringify(request)
                 });
 
                 const data = await response.json();
                 
-                // Display the summary
-                summaryDiv.innerHTML = `<pre class="whitespace-pre-wrap">${data.summary}</pre>`;
+                // Update conversation history
+                conversationHistory.push({
+                    role: 'user',
+                    content: prompt
+                });
+                conversationHistory.push({
+                    role: 'assistant',
+                    content: data.summary
+                });
+
+                // Update context
+                if (data.rawResponse && !data.rawResponse.error) {
+                    currentContext.lastAction = data.rawResponse.action;
+                    currentContext.lastData = data.rawResponse;
+                    if (data.rawResponse.filters) {
+                        currentContext.filters = { ...currentContext.filters, ...data.rawResponse.filters };
+                    }
+                }
+
+                // Display the response
+                addMessage(data.summary, 'assistant');
 
                 // Clear previous visualizations
                 document.getElementById('dataTable').innerHTML = '';
@@ -360,7 +442,7 @@
                 }
             } catch (error) {
                 console.error('Error:', error);
-                summaryDiv.innerHTML = `<p class="text-red-500">Error: ${error.message || 'Could not process the request. Please try again.'}</p>`;
+                addMessage(`Error: ${error.message || 'Could not process the request. Please try again.'}`, 'assistant');
             }
         }
 
@@ -439,6 +521,34 @@
 
             tableContainer.appendChild(table);
         }
+
+        // Function to clear conversation
+        function clearConversation() {
+            conversationHistory = [];
+            currentContext = {
+                lastAction: null,
+                lastData: null,
+                filters: {}
+            };
+            document.getElementById('conversation').innerHTML = '';
+            document.getElementById('dataTable').innerHTML = '';
+            document.getElementById('summary').innerHTML = '';
+            if (severityChart instanceof Chart) {
+                severityChart.destroy();
+                severityChart = null;
+            }
+            if (trendChart instanceof Chart) {
+                trendChart.destroy();
+                trendChart = null;
+            }
+        }
+
+        // Add clear conversation button
+        const clearButton = document.createElement('button');
+        clearButton.className = 'ml-4 inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500';
+        clearButton.innerHTML = '<i class="fas fa-trash mr-2"></i>Clear Conversation';
+        clearButton.onclick = clearConversation;
+        document.querySelector('.space-y-4').appendChild(clearButton);
     </script>
 </body>
 </html> 

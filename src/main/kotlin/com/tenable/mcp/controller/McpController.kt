@@ -14,12 +14,29 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 // Request DTO for the /ask endpoint
-data class AskRequest(val prompt: String)
+data class AskRequest(
+    val prompt: String,
+    val context: ConversationContext? = null
+)
 
 // Response DTO containing both raw API response and a human-readable summary
 data class AskResponse(
     val rawResponse: Map<String, Any>,  // Raw JSON response from Tenable API
-    val summary: String                 // Human-readable summary of the response
+    val summary: String,                // Human-readable summary of the response
+    val action: String? = null,         // The action taken
+    val filters: Map<String, Any>? = null  // Any filters applied
+)
+
+// Conversation context
+data class ConversationContext(
+    val history: List<Message> = emptyList(),
+    val currentContext: Map<String, Any> = emptyMap()
+)
+
+// Message in conversation history
+data class Message(
+    val role: String,
+    val content: String
 )
 
 /**
@@ -43,7 +60,7 @@ class McpController(
     fun ask(@RequestBody request: AskRequest): AskResponse {
         try {
             // Analyze the prompt to determine the user's intent
-            val intent = intentClassifier.classifyIntent(request.prompt)
+            val intent = intentClassifier.classifyIntent(request.prompt, request.context)
             
             // Execute the appropriate API call based on the intent
             val rawResponse = when (intent.action) {
@@ -54,28 +71,60 @@ class McpController(
                         cveId = intent.cveId
                     )
                     // Transform the response to match the expected format
-                    mapOf("vulnerabilities" to (response["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()))
+                    mapOf(
+                        "vulnerabilities" to (response["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()),
+                        "action" to "list_vulnerabilities",
+                        "filters" to mapOf(
+                            "severity" to (intent.severity?.name ?: "all"),
+                            "timeRange" to (intent.timeRange?.let { "${it.start} to ${it.end}" } ?: "all"),
+                            "cveId" to (intent.cveId ?: "all")
+                        )
+                    )
                 }
-                Action.LIST_ASSETS -> tenableClient.listAssets(
-                    timeRange = intent.timeRange,
-                    assetId = intent.assetId
-                )
-                Action.EXPORT_VULNERABILITIES, Action.EXPORT_ASSETS -> tenableClient.exportReport(
-                    timeRange = intent.timeRange
-                )
+                Action.LIST_ASSETS -> {
+                    val response = tenableClient.listAssets(
+                        timeRange = intent.timeRange,
+                        assetId = intent.assetId
+                    )
+                    mapOf(
+                        "assets" to (response["assets"] as? List<Map<String, Any>> ?: emptyList()),
+                        "action" to "list_assets",
+                        "filters" to mapOf(
+                            "timeRange" to (intent.timeRange?.let { "${it.start} to ${it.end}" } ?: "all"),
+                            "assetId" to (intent.assetId ?: "all")
+                        )
+                    )
+                }
+                Action.EXPORT_VULNERABILITIES, Action.EXPORT_ASSETS -> {
+                    val response = tenableClient.exportReport(
+                        timeRange = intent.timeRange
+                    )
+                    mapOf(
+                        "export" to response,
+                        "action" to "export_report",
+                        "filters" to mapOf(
+                            "timeRange" to (intent.timeRange?.let { "${it.start} to ${it.end}" } ?: "all")
+                        )
+                    )
+                }
                 else -> mapOf("error" to "Could not determine the intent from the prompt")
             }
 
             // Generate a human-readable summary of the response
             val summary = generateSummary(intent, rawResponse)
             
-            return AskResponse(rawResponse, summary)
+            return AskResponse(
+                rawResponse = rawResponse,
+                summary = summary,
+                action = rawResponse["action"] as? String,
+                filters = rawResponse["filters"] as? Map<String, Any>
+            )
         } catch (e: Exception) {
             logger.error("Error processing request: ${request.prompt}", e)
             val errorMessage = e.message ?: "An unknown error occurred"
             return AskResponse(
-                mapOf("error" to errorMessage),
-                "Error: $errorMessage"
+                rawResponse = mapOf("error" to errorMessage),
+                summary = "Error: $errorMessage"
             )
         }
     }
