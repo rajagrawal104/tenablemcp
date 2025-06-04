@@ -237,9 +237,13 @@
                     if (data.rawResponse) {
                         const rawData = data.rawResponse;
                         
-                        // Create table if data is an array
-                        if (Array.isArray(rawData)) {
-                            createDataTable(rawData);
+                        // Create table if data is an array or has a data property
+                        const tableData = Array.isArray(rawData) ? rawData : 
+                                        rawData.vulnerabilities || rawData.assets || 
+                                        Object.values(rawData).find(v => Array.isArray(v));
+                        
+                        if (tableData && Array.isArray(tableData)) {
+                            createDataTable(tableData);
                             dataTableDiv.classList.remove('hidden');
                         }
 
@@ -289,45 +293,22 @@
         }
 
         function createVisualizations(data) {
-            if (!data || !data.length) return;
+            if (!data) return;
 
             // Create trend chart if we have timestamp data
-            if (data[0].timestamp || data[0].created_at) {
-                const trendCtx = document.getElementById('trendChart').getContext('2d');
-                const timestamps = data.map(item => item.timestamp || item.created_at);
-                const counts = timestamps.reduce((acc, curr) => {
-                    acc[curr] = (acc[curr] || 0) + 1;
-                    return acc;
-                }, {});
+            const trendCtx = document.getElementById('trendChart').getContext('2d');
+            const severityCtx = document.getElementById('severityChart').getContext('2d');
 
-                new Chart(trendCtx, {
-                    type: 'line',
-                    data: {
-                        labels: Object.keys(counts),
-                        datasets: [{
-                            label: 'Trend Over Time',
-                            data: Object.values(counts),
-                            borderColor: 'rgb(75, 192, 192)',
-                            tension: 0.1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            title: {
-                                display: true,
-                                text: 'Trend Over Time'
-                            }
-                        }
-                    }
-                });
-            }
+            // Extract data for visualizations
+            const tableData = Array.isArray(data) ? data : 
+                            data.vulnerabilities || data.assets || 
+                            Object.values(data).find(v => Array.isArray(v));
 
-            // Create severity distribution chart if we have severity data
-            if (data[0].severity) {
-                const severityCtx = document.getElementById('severityChart').getContext('2d');
-                const severityCounts = data.reduce((acc, curr) => {
-                    acc[curr.severity] = (acc[curr.severity] || 0) + 1;
+            if (tableData && Array.isArray(tableData)) {
+                // Create severity distribution chart
+                const severityCounts = tableData.reduce((acc, curr) => {
+                    const severity = curr.severity || curr.risk_score || 'Unknown';
+                    acc[severity] = (acc[severity] || 0) + 1;
                     return acc;
                 }, {});
 
@@ -338,10 +319,11 @@
                         datasets: [{
                             data: Object.values(severityCounts),
                             backgroundColor: [
-                                'rgb(255, 99, 132)',
-                                'rgb(54, 162, 235)',
-                                'rgb(255, 205, 86)',
-                                'rgb(75, 192, 192)'
+                                'rgb(255, 99, 132)',   // Critical
+                                'rgb(255, 159, 64)',   // High
+                                'rgb(255, 205, 86)',   // Medium
+                                'rgb(75, 192, 192)',   // Low
+                                'rgb(54, 162, 235)'    // Unknown
                             ]
                         }]
                     },
@@ -350,11 +332,62 @@
                         plugins: {
                             title: {
                                 display: true,
-                                text: 'Severity Distribution'
+                                text: 'Distribution by Severity'
+                            },
+                            legend: {
+                                position: 'bottom'
                             }
                         }
                     }
                 });
+
+                // Create trend chart if we have timestamp data
+                const hasTimestamp = tableData.some(item => item.timestamp || item.created_at || item.last_seen);
+                if (hasTimestamp) {
+                    const timestamps = tableData.map(item => {
+                        const date = new Date(item.timestamp || item.created_at || item.last_seen);
+                        return date.toLocaleDateString();
+                    });
+
+                    const counts = timestamps.reduce((acc, curr) => {
+                        acc[curr] = (acc[curr] || 0) + 1;
+                        return acc;
+                    }, {});
+
+                    new Chart(trendCtx, {
+                        type: 'line',
+                        data: {
+                            labels: Object.keys(counts),
+                            datasets: [{
+                                label: 'Items Over Time',
+                                data: Object.values(counts),
+                                borderColor: 'rgb(75, 192, 192)',
+                                tension: 0.1,
+                                fill: false
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: 'Trend Over Time'
+                                },
+                                legend: {
+                                    position: 'bottom'
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        stepSize: 1
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
             }
         }
     </script>
