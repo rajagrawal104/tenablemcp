@@ -489,19 +489,34 @@
                         downloadInfo.className = 'text-sm text-gray-600 mb-2';
                         downloadInfo.textContent = `Found ${displayData.length} records. Click below to download as CSV.`;
                         
+                        // Add data preview
+                        const previewSection = document.createElement('div');
+                        previewSection.className = 'mt-2 mb-4';
+                        const previewTitle = document.createElement('p');
+                        previewTitle.className = 'text-sm font-medium text-gray-700 mb-1';
+                        previewTitle.textContent = 'Data Preview:';
+                        previewSection.appendChild(previewTitle);
+                        
+                        const previewContent = document.createElement('pre');
+                        previewContent.className = 'bg-gray-100 p-2 rounded text-xs overflow-x-auto';
+                        previewContent.textContent = JSON.stringify(displayData[0], null, 2);
+                        previewSection.appendChild(previewContent);
+                        
                         const downloadButton = document.createElement('button');
                         downloadButton.className = 'px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors';
                         downloadButton.innerHTML = '<i class="fas fa-download mr-2"></i>Download CSV';
                         downloadButton.onclick = () => {
                             try {
+                                console.log('Starting CSV export...');
                                 exportToCSV(displayData);
                             } catch (error) {
                                 console.error('Error in CSV export:', error);
-                                alert('Error exporting to CSV. Please try again.');
+                                alert('Error exporting to CSV. Please check the console for details.');
                             }
                         };
                         
                         downloadSection.appendChild(downloadInfo);
+                        downloadSection.appendChild(previewSection);
                         downloadSection.appendChild(downloadButton);
                         document.getElementById('responseContainer').appendChild(downloadSection);
                     }
@@ -797,16 +812,27 @@
         }
 
         function exportToCSV(data) {
+            console.log('Starting CSV export with data:', data);
+
             if (!data || !Array.isArray(data) || data.length === 0) {
                 console.error('Invalid data for CSV export:', data);
                 return;
             }
 
             try {
+                // Debug log the first item
+                console.log('First item structure:', data[0]);
+
                 // Flatten nested objects and arrays
-                const flattenedData = data.map(item => {
+                const flattenedData = data.map((item, index) => {
+                    console.log(`Processing item ${index}:`, item);
                     const flattened = {};
+                    
                     const flatten = (obj, prefix = '') => {
+                        if (!obj || typeof obj !== 'object') {
+                            return;
+                        }
+
                         for (const key in obj) {
                             if (obj.hasOwnProperty(key)) {
                                 const value = obj[key];
@@ -816,19 +842,38 @@
                                     flattened[newKey] = '';
                                 } else if (typeof value === 'object') {
                                     if (Array.isArray(value)) {
-                                        flattened[newKey] = value.join('; ');
+                                        // Handle arrays
+                                        if (value.length > 0) {
+                                            if (typeof value[0] === 'object') {
+                                                // If array contains objects, flatten each object
+                                                value.forEach((subItem, subIndex) => {
+                                                    flatten(subItem, `${newKey}_${subIndex}`);
+                                                });
+                                            } else {
+                                                // If array contains simple values, join them
+                                                flattened[newKey] = value.join('; ');
+                                            }
+                                        } else {
+                                            flattened[newKey] = '';
+                                        }
                                     } else {
+                                        // Recursively flatten nested objects
                                         flatten(value, newKey);
                                     }
                                 } else {
+                                    // Handle primitive values
                                     flattened[newKey] = value;
                                 }
                             }
                         }
                     };
+
                     flatten(item);
+                    console.log(`Flattened item ${index}:`, flattened);
                     return flattened;
                 });
+
+                console.log('Flattened data:', flattenedData);
 
                 // Get all unique headers
                 const headers = new Set();
@@ -838,6 +883,7 @@
 
                 // Convert headers to array and sort them
                 const headerArray = Array.from(headers).sort();
+                console.log('CSV Headers:', headerArray);
 
                 // Create CSV content
                 const csvContent = [
@@ -862,6 +908,8 @@
                     )
                 ].join('\n');
 
+                console.log('CSV Content preview:', csvContent.substring(0, 500) + '...');
+
                 // Create and trigger download
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement('a');
@@ -871,9 +919,16 @@
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+
+                console.log('CSV export completed successfully');
             } catch (error) {
                 console.error('Error exporting to CSV:', error);
-                alert('Error exporting to CSV. Please try again or contact support.');
+                console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    data: data
+                });
+                alert('Error exporting to CSV. Please check the console for details.');
             }
         }
 
