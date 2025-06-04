@@ -292,57 +292,20 @@
             }
         }
 
-        // Function to create a data table
-        function createDataTable(data) {
-            if (!data) return;
-
-            // Clear existing table
-            const tableContainer = document.getElementById('dataTable');
-            tableContainer.innerHTML = '';
-
-            // Extract data array from either vulnerabilities or assets
-            const dataArray = Array.isArray(data.vulnerabilities) ? data.vulnerabilities : 
-                             Array.isArray(data.assets) ? data.assets : [];
-            
-            if (dataArray.length === 0) return;
-
-            // Create table
-            const table = document.createElement('table');
-            table.className = 'table table-striped';
-
-            // Create header
-            const thead = document.createElement('thead');
-            const headerRow = document.createElement('tr');
-            Object.keys(dataArray[0]).forEach(key => {
-                const th = document.createElement('th');
-                th.textContent = key.charAt(0).toUpperCase() + key.slice(1);
-                headerRow.appendChild(th);
-            });
-            thead.appendChild(headerRow);
-            table.appendChild(thead);
-
-            // Create body
-            const tbody = document.createElement('tbody');
-            dataArray.forEach(item => {
-                const row = document.createElement('tr');
-                Object.values(item).forEach(value => {
-                    const td = document.createElement('td');
-                    td.textContent = value;
-                    row.appendChild(td);
-                });
-                tbody.appendChild(row);
-            });
-            table.appendChild(tbody);
-
-            tableContainer.appendChild(table);
-        }
-
         // Function to ask a question
         async function askQuestion() {
             const prompt = document.getElementById('query').value;
             if (!prompt) return;
 
+            const summaryDiv = document.getElementById('summary');
+            const dataTableDiv = document.getElementById('dataTable');
+            const visualizationDiv = document.getElementById('visualization');
+
             try {
+                summaryDiv.innerHTML = '<p class="text-gray-500">Processing your request...</p>';
+                dataTableDiv.classList.add('hidden');
+                visualizationDiv.classList.add('hidden');
+
                 const response = await fetch('/ask', {
                     method: 'POST',
                     headers: {
@@ -354,7 +317,7 @@
                 const data = await response.json();
                 
                 // Display the summary
-                document.getElementById('summary').textContent = data.summary;
+                summaryDiv.innerHTML = `<pre class="whitespace-pre-wrap">${data.summary}</pre>`;
 
                 // Clear previous visualizations
                 document.getElementById('dataTable').innerHTML = '';
@@ -367,15 +330,114 @@
                     trendChart = null;
                 }
 
-                // Create new visualizations if we have data
+                // Handle raw response data
                 if (data.rawResponse && !data.rawResponse.error) {
-                    createDataTable(data.rawResponse);
-                    createVisualizations(data.rawResponse);
+                    const rawData = data.rawResponse;
+                    
+                    // Check if we have vulnerabilities or assets data
+                    if (rawData.vulnerabilities || rawData.assets) {
+                        const tableData = rawData.vulnerabilities || rawData.assets;
+                        if (Array.isArray(tableData) && tableData.length > 0) {
+                            createDataTable(tableData);
+                            dataTableDiv.classList.remove('hidden');
+
+                            // Add export button if CSV is requested
+                            if (prompt.toLowerCase().includes('csv')) {
+                                const exportButton = document.createElement('button');
+                                exportButton.className = 'mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500';
+                                exportButton.innerHTML = '<i class="fas fa-download mr-2"></i>Download CSV';
+                                exportButton.onclick = () => exportToCSV(tableData);
+                                dataTableDiv.appendChild(exportButton);
+                            }
+                        }
+                    }
+
+                    // Create visualizations if we have data
+                    if (rawData.vulnerabilities || rawData.assets) {
+                        createVisualizations(rawData);
+                        visualizationDiv.classList.remove('hidden');
+                    }
                 }
             } catch (error) {
                 console.error('Error:', error);
-                document.getElementById('summary').textContent = 'Error: Could not process the request. Please try again.';
+                summaryDiv.innerHTML = `<p class="text-red-500">Error: ${error.message || 'Could not process the request. Please try again.'}</p>`;
             }
+        }
+
+        // Function to export data to CSV
+        function exportToCSV(data) {
+            if (!data || !Array.isArray(data) || data.length === 0) return;
+
+            // Get headers from the first item
+            const headers = Object.keys(data[0]);
+            
+            // Create CSV content
+            const csvContent = [
+                headers.join(','), // Header row
+                ...data.map(item => 
+                    headers.map(header => {
+                        const value = item[header];
+                        // Handle values that might contain commas
+                        return typeof value === 'string' && value.includes(',') 
+                            ? `"${value}"` 
+                            : value;
+                    }).join(',')
+                )
+            ].join('\n');
+
+            // Create and trigger download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'tenable_data.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Function to create a data table
+        function createDataTable(data) {
+            if (!data || !Array.isArray(data) || data.length === 0) return;
+
+            // Clear existing table
+            const tableContainer = document.getElementById('dataTable');
+            tableContainer.innerHTML = '';
+
+            // Create table
+            const table = document.createElement('table');
+            table.className = 'min-w-full divide-y divide-gray-200';
+
+            // Create header
+            const thead = document.createElement('thead');
+            thead.className = 'bg-gray-50';
+            const headerRow = document.createElement('tr');
+            Object.keys(data[0]).forEach(key => {
+                const th = document.createElement('th');
+                th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+                th.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+
+            // Create body
+            const tbody = document.createElement('tbody');
+            tbody.className = 'bg-white divide-y divide-gray-200';
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                Object.values(item).forEach(value => {
+                    const td = document.createElement('td');
+                    td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+                    td.textContent = value;
+                    row.appendChild(td);
+                });
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+
+            tableContainer.appendChild(table);
         }
     </script>
 </body>
