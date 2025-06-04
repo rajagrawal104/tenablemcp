@@ -53,7 +53,7 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build()
 
-            val url = "${tenableConfig.baseUrl}/api/v2/scanners"
+            val url = "${tenableConfig.baseUrl}/api/v3/assets"
             logger.debug("Testing connection to: $url")
             logger.debug("Using access key: ${tenableConfig.accessKey.take(4)}...")
             
@@ -61,6 +61,7 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                 .url(url)
                 .addHeader("X-ApiKeys", "accessKey=${tenableConfig.accessKey};secretKey=${tenableConfig.secretKey}")
                 .addHeader("Accept", "application/json")
+                .addHeader("Content-Type", "application/json")
                 .get()
                 .build()
 
@@ -79,7 +80,7 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                 } else {
                     val details: String = when (response.code) {
                         401 -> "Invalid credentials (Access Key or Secret Key)"
-                        403 -> "Insufficient permissions. Please ensure your API keys have scanner access."
+                        403 -> "Insufficient permissions. Please ensure your API keys have asset access."
                         404 -> "API endpoint not found"
                         else -> "Connection failed with status ${response.code}. Response: $responseBody"
                     }
