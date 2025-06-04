@@ -55,15 +55,20 @@ class ConfigController(private val tenableConfig: TenableConfig) {
 
             val url = "${tenableConfig.baseUrl}/api/v2/users/me"
             logger.debug("Testing connection to: $url")
+            logger.debug("Using access key: ${tenableConfig.accessKey.take(4)}...")
             
             val request = Request.Builder()
                 .url(url)
                 .addHeader("X-ApiKeys", "accessKey=${tenableConfig.accessKey};secretKey=${tenableConfig.secretKey}")
+                .addHeader("Accept", "application/json")
                 .get()
                 .build()
 
             client.newCall(request).execute().use { response ->
+                val responseBody = response.body?.string()
                 logger.debug("Response status: ${response.code}")
+                logger.debug("Response body: $responseBody")
+                
                 if (response.isSuccessful) {
                     ResponseEntity.ok(mapOf(
                         "success" to true,
@@ -74,9 +79,9 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                 } else {
                     val details: String = when (response.code) {
                         401 -> "Invalid credentials (Access Key or Secret Key)"
-                        403 -> "Insufficient permissions"
+                        403 -> "Insufficient permissions. Please ensure your API keys have admin access."
                         404 -> "API endpoint not found"
-                        else -> "Connection failed with status ${response.code}"
+                        else -> "Connection failed with status ${response.code}. Response: $responseBody"
                     }
                     logger.error("Connection failed: $details")
                     ResponseEntity.badRequest().body(mapOf(
