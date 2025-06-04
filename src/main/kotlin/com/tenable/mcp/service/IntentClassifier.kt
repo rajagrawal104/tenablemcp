@@ -107,9 +107,11 @@ class IntentClassifier {
         val lowerPrompt = prompt.lowercase()
         
         // Check for export-related patterns first
-        if (lowerPrompt.contains(Regex("(export|download|save|get csv|get excel|download as|save as|export as)"))) {
+        if (lowerPrompt.contains(Regex("(export|download|save|get csv|get excel|download as|save as|export as|csv)"))) {
             return if (lowerPrompt.contains(Regex("(asset|host|server|machine)"))) {
                 Action.EXPORT_ASSETS
+            } else if (lowerPrompt.contains(Regex("(scan|scanning)"))) {
+                Action.EXPORT_SCANS
             } else {
                 Action.EXPORT_VULNERABILITIES
             }
@@ -125,8 +127,8 @@ class IntentClassifier {
             return Action.LIST_ASSETS
         }
 
-        // Scan-related patterns
-        if (lowerPrompt.contains(Regex("(scan|scan list|scan history|scan schedule|scheduled scan|historical scan|past scan|previous scan|recent scan|last scan|all scan|scan status|scan result|scan report)"))) {
+        // Scan-related patterns - expanded to catch more variations
+        if (lowerPrompt.contains(Regex("(scan|scan list|scan history|scan schedule|scheduled scan|historical scan|past scan|previous scan|recent scan|last scan|all scan|scan status|scan result|scan report|show.*scan|list.*scan|get.*scan|display.*scan|view.*scan)"))) {
             return Action.LIST_SCANS
         }
 
