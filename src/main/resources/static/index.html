@@ -229,34 +229,32 @@
             })
             .then(response => response.json())
             .then(data => {
-                if (data.summary) {
-                    // Update summary
-                    summaryDiv.innerHTML = `<pre class="whitespace-pre-wrap">${data.summary}</pre>`;
+                // Display the summary
+                summaryDiv.innerHTML = `<pre class="whitespace-pre-wrap">${data.summary}</pre>`;
 
-                    // Handle raw response data
-                    if (data.rawResponse) {
-                        const rawData = data.rawResponse;
-                        
-                        // Create table if data is an array or has a data property
-                        const tableData = Array.isArray(rawData) ? rawData : 
-                                        rawData.vulnerabilities || rawData.assets || 
-                                        Object.values(rawData).find(v => Array.isArray(v));
-                        
-                        if (tableData && Array.isArray(tableData)) {
+                // Handle raw response data
+                if (data.rawResponse) {
+                    const rawData = data.rawResponse;
+                    
+                    // Check if we have vulnerabilities or assets data
+                    if (rawData.vulnerabilities || rawData.assets) {
+                        const tableData = rawData.vulnerabilities || rawData.assets;
+                        if (Array.isArray(tableData) && tableData.length > 0) {
                             createDataTable(tableData);
                             dataTableDiv.classList.remove('hidden');
                         }
+                    }
 
-                        // Create visualizations
+                    // Create visualizations if we have data
+                    if (rawData.vulnerabilities || rawData.assets) {
                         createVisualizations(rawData);
                         visualizationDiv.classList.remove('hidden');
                     }
-                } else {
-                    summaryDiv.innerHTML = `<p class="text-red-500">Error: Could not process the response</p>`;
                 }
             })
             .catch(error => {
-                summaryDiv.innerHTML = `<p class="text-red-500">Error: ${error}</p>`;
+                console.error('Error:', error);
+                summaryDiv.innerHTML = `<p class="text-red-500">Error: ${error.message || 'Could not process the request. Please try again.'}</p>`;
             });
         }
 
@@ -295,36 +293,71 @@
         function createVisualizations(data) {
             if (!data) return;
 
-            // Create trend chart if we have timestamp data
-            const trendCtx = document.getElementById('trendChart').getContext('2d');
             const severityCtx = document.getElementById('severityChart').getContext('2d');
+            const trendCtx = document.getElementById('trendChart').getContext('2d');
 
-            // Extract data for visualizations
-            const tableData = Array.isArray(data) ? data : 
-                            data.vulnerabilities || data.assets || 
-                            Object.values(data).find(v => Array.isArray(v));
+            // Get the data array (either vulnerabilities or assets)
+            const tableData = data.vulnerabilities || data.assets;
+            if (!tableData || !Array.isArray(tableData)) return;
 
-            if (tableData && Array.isArray(tableData)) {
-                // Create severity distribution chart
-                const severityCounts = tableData.reduce((acc, curr) => {
-                    const severity = curr.severity || curr.risk_score || 'Unknown';
-                    acc[severity] = (acc[severity] || 0) + 1;
+            // Create severity distribution chart
+            const severityCounts = tableData.reduce((acc, curr) => {
+                const severity = curr.severity || curr.risk_score || 'Unknown';
+                acc[severity] = (acc[severity] || 0) + 1;
+                return acc;
+            }, {});
+
+            new Chart(severityCtx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(severityCounts),
+                    datasets: [{
+                        data: Object.values(severityCounts),
+                        backgroundColor: [
+                            'rgb(255, 99, 132)',   // Critical
+                            'rgb(255, 159, 64)',   // High
+                            'rgb(255, 205, 86)',   // Medium
+                            'rgb(75, 192, 192)',   // Low
+                            'rgb(54, 162, 235)'    // Unknown
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Distribution by Severity'
+                        },
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Create trend chart if we have timestamp data
+            const hasTimestamp = tableData.some(item => item.timestamp || item.created_at || item.last_seen);
+            if (hasTimestamp) {
+                const timestamps = tableData.map(item => {
+                    const date = new Date(item.timestamp || item.created_at || item.last_seen);
+                    return date.toLocaleDateString();
+                });
+
+                const trendData = timestamps.reduce((acc, date) => {
+                    acc[date] = (acc[date] || 0) + 1;
                     return acc;
                 }, {});
 
-                new Chart(severityCtx, {
-                    type: 'pie',
+                new Chart(trendCtx, {
+                    type: 'line',
                     data: {
-                        labels: Object.keys(severityCounts),
+                        labels: Object.keys(trendData),
                         datasets: [{
-                            data: Object.values(severityCounts),
-                            backgroundColor: [
-                                'rgb(255, 99, 132)',   // Critical
-                                'rgb(255, 159, 64)',   // High
-                                'rgb(255, 205, 86)',   // Medium
-                                'rgb(75, 192, 192)',   // Low
-                                'rgb(54, 162, 235)'    // Unknown
-                            ]
+                            label: 'Count',
+                            data: Object.values(trendData),
+                            borderColor: 'rgb(75, 192, 192)',
+                            tension: 0.1
                         }]
                     },
                     options: {
@@ -332,62 +365,16 @@
                         plugins: {
                             title: {
                                 display: true,
-                                text: 'Distribution by Severity'
-                            },
-                            legend: {
-                                position: 'bottom'
+                                text: 'Trend Over Time'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
                             }
                         }
                     }
                 });
-
-                // Create trend chart if we have timestamp data
-                const hasTimestamp = tableData.some(item => item.timestamp || item.created_at || item.last_seen);
-                if (hasTimestamp) {
-                    const timestamps = tableData.map(item => {
-                        const date = new Date(item.timestamp || item.created_at || item.last_seen);
-                        return date.toLocaleDateString();
-                    });
-
-                    const counts = timestamps.reduce((acc, curr) => {
-                        acc[curr] = (acc[curr] || 0) + 1;
-                        return acc;
-                    }, {});
-
-                    new Chart(trendCtx, {
-                        type: 'line',
-                        data: {
-                            labels: Object.keys(counts),
-                            datasets: [{
-                                label: 'Items Over Time',
-                                data: Object.values(counts),
-                                borderColor: 'rgb(75, 192, 192)',
-                                tension: 0.1,
-                                fill: false
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            plugins: {
-                                title: {
-                                    display: true,
-                                    text: 'Trend Over Time'
-                                },
-                                legend: {
-                                    position: 'bottom'
-                                }
-                            },
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    ticks: {
-                                        stepSize: 1
-                                    }
-                                }
-                            }
-                        }
-                    });
-                }
             }
         }
     </script>
