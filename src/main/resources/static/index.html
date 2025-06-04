@@ -311,6 +311,7 @@
                 }
 
                 const data = await response.json();
+                console.log('Response data:', data); // Debug log
                 
                 // Update context
                 currentContext = {
@@ -326,9 +327,21 @@
 
                 // Handle the response based on the action
                 if (data.rawResponse) {
+                    const dataTable = document.getElementById('dataTable');
+                    const visualization = document.getElementById('visualization');
+                    
                     if (data.action === 'list_vulnerabilities' || data.action === 'list_assets') {
-                        createDataTable(data.rawResponse);
-                        createVisualizations(data.rawResponse);
+                        if (dataTable) {
+                            dataTable.style.display = 'block';
+                            createDataTable(data.rawResponse);
+                        }
+                        if (visualization) {
+                            visualization.style.display = 'grid';
+                            createVisualizations(data.rawResponse);
+                        }
+                    } else {
+                        if (dataTable) dataTable.style.display = 'none';
+                        if (visualization) visualization.style.display = 'none';
                     }
                 }
 
@@ -360,10 +373,17 @@
             const severityChartElement = document.getElementById('severityChart');
             const trendChartElement = document.getElementById('trendChart');
             const dataTableElement = document.getElementById('dataTable');
+            const visualizationElement = document.getElementById('visualization');
 
             if (severityChartElement) severityChartElement.innerHTML = '';
             if (trendChartElement) trendChartElement.innerHTML = '';
-            if (dataTableElement) dataTableElement.innerHTML = '';
+            if (dataTableElement) {
+                dataTableElement.innerHTML = '';
+                dataTableElement.style.display = 'none';
+            }
+            if (visualizationElement) {
+                visualizationElement.style.display = 'none';
+            }
         }
 
         function createVisualizations(data) {
@@ -444,7 +464,10 @@
         }
 
         function createDataTable(data) {
-            if (!data || !Array.isArray(data) || data.length === 0) return;
+            if (!data || !Array.isArray(data) || data.length === 0) {
+                console.error('Invalid data for table:', data);
+                return;
+            }
 
             const tableContainer = document.getElementById('dataTable');
             if (!tableContainer) {
@@ -452,15 +475,26 @@
                 return;
             }
 
+            console.log('Creating table with data:', data); // Debug log
+
             const table = document.createElement('table');
             table.className = 'min-w-full divide-y divide-gray-200';
 
             // Create header
             const thead = document.createElement('thead');
             const headerRow = document.createElement('tr');
-            Object.keys(data[0]).forEach(key => {
+            headerRow.className = 'bg-gray-50';
+            
+            // Get all unique keys from the data
+            const allKeys = new Set();
+            data.forEach(item => {
+                Object.keys(item).forEach(key => allKeys.add(key));
+            });
+
+            // Create header cells
+            Array.from(allKeys).forEach(key => {
                 const th = document.createElement('th');
-                th.className = 'px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+                th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
                 th.textContent = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                 headerRow.appendChild(th);
             });
@@ -469,21 +503,28 @@
 
             // Create body
             const tbody = document.createElement('tbody');
+            tbody.className = 'bg-white divide-y divide-gray-200';
+            
             data.forEach(item => {
                 const row = document.createElement('tr');
-                row.className = 'bg-white';
-                Object.values(item).forEach(value => {
+                row.className = 'hover:bg-gray-50';
+                
+                Array.from(allKeys).forEach(key => {
                     const td = document.createElement('td');
                     td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
-                    td.textContent = value?.toString() || '';
+                    const value = item[key];
+                    td.textContent = value !== null && value !== undefined ? value.toString() : '';
                     row.appendChild(td);
                 });
+                
                 tbody.appendChild(row);
             });
             table.appendChild(tbody);
 
+            // Clear and update the container
             tableContainer.innerHTML = '';
             tableContainer.appendChild(table);
+            tableContainer.style.display = 'block';
         }
 
         function exportToCSV(data) {
