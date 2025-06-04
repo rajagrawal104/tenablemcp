@@ -25,7 +25,7 @@ data class AskResponse(
  * Provides a single endpoint that accepts prompts and returns processed results
  */
 @RestController
-@RequestMapping("/api/v3")
+@RequestMapping("")
 class McpController(
     private val intentClassifier: IntentClassifier,  // Service for analyzing user prompts
     private val tenableClient: TenableClient        // Client for Tenable.io API calls

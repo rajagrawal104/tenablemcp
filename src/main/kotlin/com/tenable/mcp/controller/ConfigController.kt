@@ -53,7 +53,7 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build()
 
-            val url = "${tenableConfig.baseUrl}/api/v3/assets"
+            val url = "${tenableConfig.baseUrl}/assets"
             logger.debug("Testing connection to: $url")
             logger.debug("Using access key: ${tenableConfig.accessKey.take(4)}...")
             

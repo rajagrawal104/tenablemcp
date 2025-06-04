@@ -10,7 +10,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 @RestController
-@RequestMapping("/api/v3/visualizations")
+@RequestMapping("/visualizations")
 class VisualizationController(private val visualizationService: VisualizationService) {
 
     /**
