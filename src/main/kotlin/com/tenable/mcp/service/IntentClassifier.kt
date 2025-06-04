@@ -6,6 +6,7 @@ import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.time.temporal.Duration
 import java.time.DayOfWeek
+import com.tenable.mcp.controller.ConversationContext
 
 // Data class representing the extracted intent from a user prompt
 data class Intent(
@@ -186,14 +187,14 @@ class IntentClassifier {
         }
 
         // If we have context, try to infer from previous action
-        context?.let {
+        context?.let { ctx ->
             // If the last action was listing vulnerabilities and the prompt is about filtering
-            if (it.currentContext["lastAction"] == "list_vulnerabilities" &&
+            if (ctx.currentContext["lastAction"] == "list_vulnerabilities" &&
                 lowerPrompt.contains(Regex("(filter|show|only|just)"))) {
                 return Action.LIST_VULNERABILITIES
             }
             // If the last action was listing assets and the prompt is about filtering
-            if (it.currentContext["lastAction"] == "list_assets" &&
+            if (ctx.currentContext["lastAction"] == "list_assets" &&
                 lowerPrompt.contains(Regex("(filter|show|only|just)"))) {
                 return Action.LIST_ASSETS
             }
@@ -221,10 +222,10 @@ class IntentClassifier {
         }
 
         // If we have context and the prompt is about filtering, check previous severity
-        context?.let {
+        context?.let { ctx ->
             if (lowerPrompt.contains(Regex("(filter|show|only|just)")) &&
-                it.currentContext["filters"] is Map<*, *>) {
-                val filters = it.currentContext["filters"] as Map<*, *>
+                ctx.currentContext["filters"] is Map<*, *>) {
+                val filters = ctx.currentContext["filters"] as Map<*, *>
                 filters["severity"]?.toString()?.let { severity ->
                     return try {
                         Severity.valueOf(severity.uppercase())
@@ -289,10 +290,10 @@ class IntentClassifier {
         }
 
         // If we have context and the prompt is about filtering, check previous time range
-        context?.let {
+        context?.let { ctx ->
             if (lowerPrompt.contains(Regex("(filter|show|only|just)")) &&
-                it.currentContext["filters"] is Map<*, *>) {
-                val filters = it.currentContext["filters"] as Map<*, *>
+                ctx.currentContext["filters"] is Map<*, *>) {
+                val filters = ctx.currentContext["filters"] as Map<*, *>
                 filters["timeRange"]?.toString()?.let { timeRangeStr ->
                     if (timeRangeStr != "all") {
                         val (start, end) = timeRangeStr.split(" to ")
