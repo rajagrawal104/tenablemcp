@@ -20,12 +20,12 @@ class ConfigController(private val tenableConfig: TenableConfig) {
             ResponseEntity.ok(mapOf(
                 "success" to true,
                 "message" to "Configuration updated successfully"
-            ) as Map<String, Any>)
+            ))
         } catch (e: Exception) {
             ResponseEntity.badRequest().body(mapOf(
                 "success" to false,
                 "message" to (e.message ?: "Unknown error occurred")
-            ) as Map<String, Any>)
+            ))
         }
     }
 
@@ -62,20 +62,21 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                     ResponseEntity.ok(mapOf(
                         "success" to true,
                         "message" to "Successfully connected to Tenable.io",
-                        "status" to response.code,
+                        "status" to (response.code as Int),
                         "details" to "Credentials are valid and connection is working"
                     ))
                 } else {
+                    val details: String = when (response.code) {
+                        401 -> "Invalid credentials (Access Key or Secret Key)"
+                        403 -> "Insufficient permissions"
+                        404 -> "API endpoint not found"
+                        else -> "Connection failed with status ${response.code}"
+                    }
                     ResponseEntity.badRequest().body(mapOf(
                         "success" to false,
                         "message" to "Failed to connect to Tenable.io",
-                        "status" to response.code,
-                        "details" to when (response.code) {
-                            401 -> "Invalid credentials (Access Key or Secret Key)"
-                            403 -> "Insufficient permissions"
-                            404 -> "API endpoint not found"
-                            else -> "Connection failed with status ${response.code}"
-                        }
+                        "status" to (response.code as Int),
+                        "details" to details
                     ))
                 }
             }
@@ -83,7 +84,7 @@ class ConfigController(private val tenableConfig: TenableConfig) {
             ResponseEntity.badRequest().body(mapOf(
                 "success" to false,
                 "message" to "Connection test failed",
-                "details" to e.message ?: "Unknown error occurred"
+                "details" to (e.message?.toString() ?: "Unknown error occurred")
             ))
         }
     }
