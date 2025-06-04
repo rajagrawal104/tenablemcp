@@ -188,13 +188,13 @@
 
             responseDiv.innerHTML = '<p class="text-gray-500">Processing your request...</p>';
 
-            fetch('/api/ask', {
+            fetch('/ask', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    query: query
+                    prompt: query
                 })
             })
             .then(response => response.json())
