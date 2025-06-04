@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: tenable-mcp
+
+tenable:
+  baseUrl: https://cloud.tenable.com
+  timeout: 30000
+  maxRetries: 3
+  # API keys should be set through the web interface or environment variables
+  apiKey: ${TENABLE_API_KEY:}
+  accessKey: ${TENABLE_ACCESS_KEY:}
+
+logging:
+  level:
+    com.tenable.mcp: DEBUG
+    org.springframework.web: INFO 
