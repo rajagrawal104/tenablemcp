@@ -106,77 +106,33 @@ class IntentClassifier {
     private fun determineAction(prompt: String, context: ConversationContext?): Action {
         val lowerPrompt = prompt.lowercase()
         
-        // Scan-related patterns
-        val scanPatterns = mapOf(
-            "list.*scan" to Action.LIST_SCANS,
-            "show.*scan" to Action.LIST_SCANS,
-            "get.*scan" to Action.LIST_SCANS,
-            "display.*scan" to Action.LIST_SCANS,
-            "view.*scan" to Action.LIST_SCANS,
-            "scan.*list" to Action.LIST_SCANS,
-            "scan.*history" to Action.LIST_SCANS,
-            "scan.*schedule" to Action.LIST_SCANS,
-            "scheduled.*scan" to Action.LIST_SCANS,
-            "historical.*scan" to Action.LIST_SCANS,
-            "past.*scan" to Action.LIST_SCANS,
-            "previous.*scan" to Action.LIST_SCANS,
-            "recent.*scan" to Action.LIST_SCANS,
-            "last.*scan" to Action.LIST_SCANS,
-            "all.*scan" to Action.LIST_SCANS,
-            "scan.*status" to Action.LIST_SCANS,
-            "scan.*result" to Action.LIST_SCANS,
-            "scan.*report" to Action.LIST_SCANS
-        )
-
-        // Check for scan-related patterns first
-        for ((pattern, action) in scanPatterns) {
-            if (prompt.matches(Regex(pattern, RegexOption.IGNORE_CASE))) {
-                return action
+        // Check for export-related patterns first
+        if (lowerPrompt.contains(Regex("(export|download|save|get csv|get excel|download as|save as|export as)"))) {
+            return if (lowerPrompt.contains(Regex("(asset|host|server|machine)"))) {
+                Action.EXPORT_ASSETS
+            } else {
+                Action.EXPORT_VULNERABILITIES
             }
         }
 
+        // Check for scan-related patterns
+        if (lowerPrompt.contains(Regex("(scan|run scan|start scan|initiate scan|perform scan|execute scan|launch scan)"))) {
+            return Action.START_SCAN
+        }
+        
         // Asset-related patterns
-        val assetPatterns = mapOf(
-            "list.*asset" to Action.LIST_ASSETS,
-            "show.*asset" to Action.LIST_ASSETS,
-            "get.*asset" to Action.LIST_ASSETS,
-            "display.*asset" to Action.LIST_ASSETS,
-            "view.*asset" to Action.LIST_ASSETS,
-            "asset.*list" to Action.LIST_ASSETS,
-            "all.*asset" to Action.LIST_ASSETS
-        )
-
-        // Check for asset-related patterns
-        for ((pattern, action) in assetPatterns) {
-            if (prompt.matches(Regex(pattern, RegexOption.IGNORE_CASE))) {
-                return action
-            }
+        if (lowerPrompt.contains(Regex("(asset|host|server|machine)"))) {
+            return Action.LIST_ASSETS
         }
 
-        // Vulnerability-related patterns
-        val vulnPatterns = mapOf(
-            "list.*vulnerability" to Action.LIST_VULNERABILITIES,
-            "show.*vulnerability" to Action.LIST_VULNERABILITIES,
-            "get.*vulnerability" to Action.LIST_VULNERABILITIES,
-            "display.*vulnerability" to Action.LIST_VULNERABILITIES,
-            "view.*vulnerability" to Action.LIST_VULNERABILITIES,
-            "vulnerability.*list" to Action.LIST_VULNERABILITIES,
-            "all.*vulnerability" to Action.LIST_VULNERABILITIES,
-            "vuln.*list" to Action.LIST_VULNERABILITIES,
-            "show.*vuln" to Action.LIST_VULNERABILITIES,
-            "list.*vuln" to Action.LIST_VULNERABILITIES
-        )
-
-        // Check for vulnerability-related patterns
-        for ((pattern, action) in vulnPatterns) {
-            if (prompt.matches(Regex(pattern, RegexOption.IGNORE_CASE))) {
-                return action
-            }
+        // Scan-related patterns
+        if (lowerPrompt.contains(Regex("(scan|scan list|scan history|scan schedule|scheduled scan|historical scan|past scan|previous scan|recent scan|last scan|all scan|scan status|scan result|scan report)"))) {
+            return Action.LIST_SCANS
         }
 
         // Check context for previous action
         context?.currentContext?.get("lastAction")?.let { lastAction ->
-            if (lastAction is String && lastAction.startsWith("list_")) {
+            if (lastAction is String) {
                 return try {
                     Action.valueOf(lastAction.uppercase())
                 } catch (e: IllegalArgumentException) {
@@ -185,7 +141,31 @@ class IntentClassifier {
             }
         }
 
-        // Default to listing vulnerabilities
+        // If no specific pattern is matched, check for vulnerability-related keywords
+        if (lowerPrompt.contains(Regex("(vulnerability|vuln|security issue|security risk|security problem)"))) {
+            return Action.LIST_VULNERABILITIES
+        }
+
+        // If still no match, check if the prompt is a follow-up question
+        if (context?.history?.isNotEmpty() == true) {
+            val lastMessage = context.history.last()
+            if (lastMessage.role == "assistant") {
+                // If the last message was about vulnerabilities, continue with vulnerabilities
+                if (lastMessage.content.contains(Regex("(vulnerability|vuln)"))) {
+                    return Action.LIST_VULNERABILITIES
+                }
+                // If the last message was about assets, continue with assets
+                if (lastMessage.content.contains(Regex("(asset|host|server)"))) {
+                    return Action.LIST_ASSETS
+                }
+                // If the last message was about scans, continue with scans
+                if (lastMessage.content.contains(Regex("(scan|scanning)"))) {
+                    return Action.LIST_SCANS
+                }
+            }
+        }
+
+        // Default to listing vulnerabilities only if no other context is available
         return Action.LIST_VULNERABILITIES
     }
 
