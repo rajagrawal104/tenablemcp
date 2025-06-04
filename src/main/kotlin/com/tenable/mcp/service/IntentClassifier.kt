@@ -185,7 +185,7 @@ class IntentClassifier {
         // First determine the main action
         val action = when {
             // Vulnerability Management
-            prompt.contains(Regex("(vulnerabilit|vuln|issue)")) -> {
+            prompt.contains(Regex("(vulnerabilit|vuln|issue|finding)")) -> {
                 when {
                     prompt.contains(Regex("(export|download)")) -> Action.EXPORT_VULNERABILITIES
                     prompt.contains(Regex("(detail|info|about)")) -> Action.GET_VULNERABILITY
