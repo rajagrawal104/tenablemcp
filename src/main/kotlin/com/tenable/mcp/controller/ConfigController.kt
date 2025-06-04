@@ -53,7 +53,7 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build()
 
-            val url = "${tenableConfig.baseUrl}/api/v2/users/me"
+            val url = "${tenableConfig.baseUrl}/api/v2/scanners"
             logger.debug("Testing connection to: $url")
             logger.debug("Using access key: ${tenableConfig.accessKey.take(4)}...")
             
@@ -79,7 +79,7 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                 } else {
                     val details: String = when (response.code) {
                         401 -> "Invalid credentials (Access Key or Secret Key)"
-                        403 -> "Insufficient permissions. Please ensure your API keys have admin access."
+                        403 -> "Insufficient permissions. Please ensure your API keys have scanner access."
                         404 -> "API endpoint not found"
                         else -> "Connection failed with status ${response.code}. Response: $responseBody"
                     }
