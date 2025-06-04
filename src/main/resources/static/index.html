@@ -555,7 +555,16 @@
                 } else if (error.message.includes('504')) {
                     errorMessage += 'The request timed out. Please try again with a more specific query or check your network connection.';
                 } else if (error.message.includes('401') || error.message.includes('403')) {
-                    errorMessage += 'Authentication failed. Please check your API configuration.';
+                    errorMessage = 'Authentication or Authorization Error: ';
+                    if (error.message.includes('Insufficient scope')) {
+                        errorMessage += 'Your API key does not have sufficient permissions. Please ensure your API key has the following scopes:\n' +
+                            '- Can View Assets\n' +
+                            '- Can View Vulnerabilities\n' +
+                            '- Can View Scans\n' +
+                            'You can update your API key permissions in the Tenable.io portal under Settings > API Keys.';
+                    } else {
+                        errorMessage += 'Please check your API configuration and ensure your API key is valid and has the required permissions.';
+                    }
                 } else if (error.message.includes('404')) {
                     errorMessage += 'The requested resource was not found. Please check your query.';
                 } else {
@@ -568,7 +577,25 @@
                     responseContainer.innerHTML = `
                         <div class="text-red-500 p-4 bg-red-50 rounded-md">
                             <p class="font-medium">Error</p>
-                            <p class="mt-2 text-sm">${errorMessage}</p>
+                            <p class="mt-2 text-sm whitespace-pre-line">${errorMessage}</p>
+                            ${error.message.includes('403') ? `
+                                <div class="mt-4 p-4 bg-blue-50 rounded-md">
+                                    <h4 class="font-medium text-blue-800">How to Fix:</h4>
+                                    <ol class="list-decimal list-inside mt-2 text-sm text-blue-700">
+                                        <li>Go to Tenable.io portal</li>
+                                        <li>Navigate to Settings > API Keys</li>
+                                        <li>Create a new API key or edit existing one</li>
+                                        <li>Enable required permissions:
+                                            <ul class="list-disc list-inside ml-4 mt-1">
+                                                <li>Can View Assets</li>
+                                                <li>Can View Vulnerabilities</li>
+                                                <li>Can View Scans</li>
+                                            </ul>
+                                        </li>
+                                        <li>Update your API configuration with the new key</li>
+                                    </ol>
+                                </div>
+                            ` : ''}
                         </div>`;
                 }
                 updateLoadingProgress(100);
