@@ -199,10 +199,10 @@
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success) {
-                    responseDiv.innerHTML = `<pre class="whitespace-pre-wrap">${data.response}</pre>`;
+                if (data.summary) {
+                    responseDiv.innerHTML = `<pre class="whitespace-pre-wrap">${data.summary}</pre>`;
                 } else {
-                    responseDiv.innerHTML = `<p class="text-red-500">Error: ${data.message}</p>`;
+                    responseDiv.innerHTML = `<p class="text-red-500">Error: Could not process the response</p>`;
                 }
             })
             .catch(error => {
