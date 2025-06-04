@@ -1,17 +1,16 @@
-server:
-  port: 8080
-
 spring:
   application:
     name: tenable-mcp
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:tenable}  # Default to tenable profile if not specified
 
+server:
+  port: 8080
+
+# Common configurations
 tenable:
-  baseUrl: https://cloud.tenable.com
   timeout: 30000
   maxRetries: 3
-  # API keys should be set through the web interface or environment variables
-  accessKey: ${TENABLE_ACCESS_KEY:}
-  secretKey: ${TENABLE_SECRET_KEY:}
 
 logging:
   level:

@@ -1,0 +1,4 @@
+tenable:
+  baseUrl: https://cloud.tenable.com
+  accessKey: ${TENABLE_DEV_ACCESS_KEY:}
+  secretKey: ${TENABLE_DEV_SECRET_KEY:} 
