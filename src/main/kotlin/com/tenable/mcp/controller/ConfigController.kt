@@ -6,10 +6,12 @@ import org.springframework.web.bind.annotation.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
+import org.slf4j.LoggerFactory
 
 @RestController
 @RequestMapping("/api/config")
 class ConfigController(private val tenableConfig: TenableConfig) {
+    private val logger = LoggerFactory.getLogger(ConfigController::class.java)
 
     @PostMapping
     fun updateConfig(@RequestBody config: Map<String, String>): ResponseEntity<Map<String, Any>> {
@@ -51,13 +53,17 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                 .readTimeout(10, TimeUnit.SECONDS)
                 .build()
 
+            val url = "${tenableConfig.baseUrl}/api/v2/users/me"
+            logger.debug("Testing connection to: $url")
+            
             val request = Request.Builder()
-                .url("${tenableConfig.baseUrl}/api/v2/users/me")
-                .addHeader("X-ApiKeys", "accessKey=${tenableConfig.accessKey}; secretKey=${tenableConfig.secretKey}")
+                .url(url)
+                .addHeader("X-ApiKeys", "accessKey=${tenableConfig.accessKey};secretKey=${tenableConfig.secretKey}")
                 .get()
                 .build()
 
             client.newCall(request).execute().use { response ->
+                logger.debug("Response status: ${response.code}")
                 if (response.isSuccessful) {
                     ResponseEntity.ok(mapOf(
                         "success" to true,
@@ -72,6 +78,7 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                         404 -> "API endpoint not found"
                         else -> "Connection failed with status ${response.code}"
                     }
+                    logger.error("Connection failed: $details")
                     ResponseEntity.badRequest().body(mapOf(
                         "success" to false,
                         "message" to "Failed to connect to Tenable.io",
@@ -81,6 +88,7 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                 }
             }
         } catch (e: Exception) {
+            logger.error("Exception during connection test", e)
             ResponseEntity.badRequest().body(mapOf(
                 "success" to false,
                 "message" to "Connection test failed",
