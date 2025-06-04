@@ -1,4 +1,5 @@
 tenable:
-  baseUrl: https://cloud.tenable.com
-  accessKey: ${TENABLE_ACCESS_KEY:}
-  secretKey: ${TENABLE_SECRET_KEY:} 
+  api:
+    url: ${TENABLE_API_URL:https://cloud.tenable.com}
+    key: ${TENABLE_ACCESS_KEY:}
+    secret: ${TENABLE_SECRET_KEY:} 

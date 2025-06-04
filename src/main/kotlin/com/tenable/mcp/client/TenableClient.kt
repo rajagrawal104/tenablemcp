@@ -15,6 +15,9 @@ import java.util.concurrent.TimeUnit
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.http.*
+import org.springframework.web.client.RestTemplate
 
 private val logger = KotlinLogging.logger {}
 
@@ -23,11 +26,18 @@ private val logger = KotlinLogging.logger {}
  * Handles authentication, request building, and response parsing
  */
 @Component
-class TenableClient(private val config: TenableConfig) {
+class TenableClient(
+    @Value("\${tenable.api.url}") private val apiUrl: String,
+    @Value("\${tenable.api.key}") private val apiKey: String,
+    @Value("\${tenable.api.secret}") private val apiSecret: String
+) {
+    private val restTemplate = RestTemplate()
+    private val formatter = DateTimeFormatter.ISO_DATE_TIME
+
     private val client: OkHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
             val request = chain.request().newBuilder()
-                .addHeader("X-ApiKeys", "accessKey=${config.accessKey};secretKey=${config.secretKey}")
+                .addHeader("X-ApiKeys", "accessKey=$apiKey;secretKey=$apiSecret")
                 .addHeader("Accept", "application/json")
                 .addHeader("Content-Type", "application/json")
                 .build()
@@ -37,27 +47,27 @@ class TenableClient(private val config: TenableConfig) {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private val baseUrl = config.baseUrl.trimEnd('/')
+    private val baseUrl = apiUrl.trimEnd('/')
 
     /**
      * List vulnerabilities matching the specified criteria
      * @param severity Optional severity filter
      * @param timeRange Optional time range filter
      * @param cveId Optional CVE ID filter
-     * @return Map containing the API response
+     * @return List of vulnerability maps
      */
     fun listVulnerabilities(
         severity: Severity? = null,
         timeRange: TimeRange? = null,
         cveId: String? = null
-    ): Map<String, Any> {
+    ): List<Map<String, Any>> {
         val queryParams = mutableMapOf<String, String>()
         
         // Add optional filters to query parameters
         severity?.let { queryParams["severity"] = it.name.lowercase() }
         timeRange?.let {
-            queryParams["start_time"] = it.start.format(DateTimeFormatter.ISO_DATE_TIME)
-            queryParams["end_time"] = it.end.format(DateTimeFormatter.ISO_DATE_TIME)
+            queryParams["start_time"] = it.start.format(formatter)
+            queryParams["end_time"] = it.end.format(formatter)
         }
         cveId?.let { queryParams["cve_id"] = it }
 
@@ -67,7 +77,8 @@ class TenableClient(private val config: TenableConfig) {
             .get()
             .build()
 
-        return executeRequest(request)
+        val response = executeRequest(request)
+        return (response["vulnerabilities"] as? List<Map<String, Any>>) ?: emptyList()
     }
 
     /**
@@ -84,8 +95,8 @@ class TenableClient(private val config: TenableConfig) {
         
         // Add optional filters to query parameters
         timeRange?.let {
-            queryParams["start_time"] = it.start.format(DateTimeFormatter.ISO_DATE_TIME)
-            queryParams["end_time"] = it.end.format(DateTimeFormatter.ISO_DATE_TIME)
+            queryParams["start_time"] = it.start.format(formatter)
+            queryParams["end_time"] = it.end.format(formatter)
         }
         assetId?.let { queryParams["asset_id"] = it }
 
@@ -114,8 +125,8 @@ class TenableClient(private val config: TenableConfig) {
         
         // Add optional time range filter
         timeRange?.let {
-            queryParams["start_time"] = it.start.format(DateTimeFormatter.ISO_DATE_TIME)
-            queryParams["end_time"] = it.end.format(DateTimeFormatter.ISO_DATE_TIME)
+            queryParams["start_time"] = it.start.format(formatter)
+            queryParams["end_time"] = it.end.format(formatter)
         }
 
         // Build and execute the request
@@ -160,81 +171,104 @@ class TenableClient(private val config: TenableConfig) {
             .joinToString("&") { "${it.key}=${it.value}" }
     }
 
-    fun listScans(timeRange: TimeRange? = null): Map<String, Any> {
-        val queryParams = mutableMapOf<String, String>()
+    fun getVulnerabilities(
+        severity: Severity? = null,
+        timeRange: TimeRange? = null,
+        cveId: String? = null
+    ): List<Map<String, Any>> {
+        val headers = createHeaders()
+        val url = "$baseUrl/vulnerabilities"
+        
+        val params = mutableMapOf<String, String>()
+        severity?.let { params["severity"] = it.name.lowercase() }
         timeRange?.let {
-            queryParams["last_modification_date"] = it.start.format(DateTimeFormatter.ISO_DATE_TIME)
+            params["start_time"] = it.start.format(formatter)
+            params["end_time"] = it.end.format(formatter)
         }
-        val request = Request.Builder()
-            .url("$baseUrl/scans?${queryParams.toQueryString()}")
-            .get()
-            .build()
-        return executeRequest(request)
+        cveId?.let { params["cve_id"] = it }
+
+        val response = restTemplate.exchange(
+            url,
+            HttpMethod.GET,
+            HttpEntity(null, headers),
+            Map::class.java,
+            params
+        )
+
+        return (response.body?.get("vulnerabilities") as? List<Map<String, Any>>) ?: emptyList()
     }
 
-    fun startScan(scanId: String? = null): Map<String, Any?> {
-        val url = if (scanId != null) {
-            "$baseUrl/scans/$scanId/launch"
-        } else {
-            "$baseUrl/scans"
-        }
+    fun getAssets(
+        timeRange: TimeRange? = null,
+        assetId: String? = null
+    ): List<Map<String, Any>> {
+        val headers = createHeaders()
+        val url = "$baseUrl/assets"
         
-        val request = if (scanId != null) {
-            Request.Builder()
-                .url(url)
-                .post(ByteArray(0).toRequestBody(null, 0, 0))
-                .build()
-        } else {
-            val body = jacksonObjectMapper().writeValueAsString(
-                mapOf(
-                    "name" to "MCP Automated Scan",
-                    "targets" to "default",
-                    "enabled" to true,
-                    "schedule" to mapOf(
-                        "type" to "once",
-                        "start_time" to System.currentTimeMillis()
-                    )
-                )
-            ).toRequestBody("application/json".toMediaTypeOrNull())
-            
-            Request.Builder()
-                .url(url)
-                .post(body)
-                .build()
+        val params = mutableMapOf<String, String>()
+        timeRange?.let {
+            params["start_time"] = it.start.format(formatter)
+            params["end_time"] = it.end.format(formatter)
         }
-        
-        val response = executeRequest(request)
-        return if (response.containsKey("scan_uuid")) {
-            mapOf(
-                "success" to true,
-                "scan_uuid" to response["scan_uuid"],
-                "message" to "Scan started successfully"
-            )
-        } else {
-            mapOf(
-                "error" to "Failed to start scan",
-                "success" to false
-            )
-        }
+        assetId?.let { params["asset_id"] = it }
+
+        val response = restTemplate.exchange(
+            url,
+            HttpMethod.GET,
+            HttpEntity(null, headers),
+            Map::class.java,
+            params
+        )
+
+        return (response.body?.get("assets") as? List<Map<String, Any>>) ?: emptyList()
     }
 
-    fun getScanStatus(scanId: String): Map<String, Any?> {
-        val request = Request.Builder()
-            .url("$baseUrl/scans/$scanId")
-            .get()
-            .build()
-            
-        val response = executeRequest(request)
-        return if (response.containsKey("status")) {
-            mapOf(
-                "status" to response["status"],
-                "scan_details" to response
-            )
-        } else {
-            mapOf(
-                "error" to "Failed to get scan status",
-                "status" to "error"
-            )
+    fun getScans(
+        timeRange: TimeRange? = null,
+        scanId: String? = null
+    ): List<Map<String, Any>> {
+        val headers = createHeaders()
+        val url = "$baseUrl/scans"
+        
+        val params = mutableMapOf<String, String>()
+        timeRange?.let {
+            params["start_time"] = it.start.format(formatter)
+            params["end_time"] = it.end.format(formatter)
+        }
+        scanId?.let { params["scan_id"] = it }
+
+        val response = restTemplate.exchange(
+            url,
+            HttpMethod.GET,
+            HttpEntity(null, headers),
+            Map::class.java,
+            params
+        )
+
+        return (response.body?.get("scans") as? List<Map<String, Any>>) ?: emptyList()
+    }
+
+    fun startScan(scanId: String): Map<String, Any> {
+        val headers = createHeaders()
+        val url = "$baseUrl/scans/$scanId/launch"
+
+        val response = restTemplate.exchange(
+            url,
+            HttpMethod.POST,
+            HttpEntity(null, headers),
+            Map::class.java
+        )
+
+        // Ensure the return type is Map<String, Any> with non-null values
+        return response.body?.entries
+            ?.filter { it.key is String && it.value != null }
+            ?.associate { it.key as String to it.value!! } ?: mapOf("error" to "Failed to start scan")
+    }
+
+    private fun createHeaders(): HttpHeaders {
+        return HttpHeaders().apply {
+            set("X-ApiKeys", "accessKey=$apiKey;secretKey=$apiSecret")
+            contentType = MediaType.APPLICATION_JSON
         }
     }
 } 

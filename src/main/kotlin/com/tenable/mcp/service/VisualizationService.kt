@@ -32,25 +32,22 @@ class VisualizationService(private val tenableClient: TenableClient) {
     /**
      * Generate a summary of the security posture
      */
-    private fun generateSummary(vulnerabilities: Map<String, Any>, assets: Map<String, Any>): Map<String, Any> {
-        val vulns = vulnerabilities["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()
-        val assetList = assets["assets"] as? List<Map<String, Any>> ?: emptyList()
-
-        val criticalVulns = vulns.count { it["severity"] == "Critical" }
-        val highVulns = vulns.count { it["severity"] == "High" }
-        val mediumVulns = vulns.count { it["severity"] == "Medium" }
-        val lowVulns = vulns.count { it["severity"] == "Low" }
+    private fun generateSummary(vulnerabilities: List<Map<String, Any>>, assets: List<Map<String, Any>>): Map<String, Any> {
+        val criticalVulns = vulnerabilities.count { it["severity"] == "Critical" }
+        val highVulns = vulnerabilities.count { it["severity"] == "High" }
+        val mediumVulns = vulnerabilities.count { it["severity"] == "Medium" }
+        val lowVulns = vulnerabilities.count { it["severity"] == "Low" }
 
         return mapOf(
-            "totalVulnerabilities" to vulns.size,
-            "totalAssets" to assetList.size,
+            "totalVulnerabilities" to vulnerabilities.size,
+            "totalAssets" to assets.size,
             "criticalVulnerabilities" to criticalVulns,
             "highVulnerabilities" to highVulns,
             "mediumVulnerabilities" to mediumVulns,
             "lowVulnerabilities" to lowVulns,
             "riskScore" to calculateRiskScore(criticalVulns, highVulns, mediumVulns, lowVulns),
-            "averageVulnerabilitiesPerAsset" to if (assetList.isNotEmpty()) vulns.size.toDouble() / assetList.size else 0.0,
-            "remediationRate" to calculateRemediationRate(vulns)
+            "averageVulnerabilitiesPerAsset" to if (assets.isNotEmpty()) vulnerabilities.size.toDouble() / assets.size else 0.0,
+            "remediationRate" to calculateRemediationRate(vulnerabilities)
         )
     }
 
@@ -74,9 +71,8 @@ class VisualizationService(private val tenableClient: TenableClient) {
     /**
      * Generate vulnerability distribution by severity
      */
-    private fun generateVulnerabilityDistribution(data: Map<String, Any>): Map<String, Any> {
-        val vulns = data["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()
-        val distribution = vulns.groupBy { it["severity"] as? String ?: "Unknown" }
+    private fun generateVulnerabilityDistribution(data: List<Map<String, Any>>): Map<String, Any> {
+        val distribution = data.groupBy { it["severity"] as? String ?: "Unknown" }
             .mapValues { it.value.size }
 
         return mapOf(
@@ -92,9 +88,8 @@ class VisualizationService(private val tenableClient: TenableClient) {
     /**
      * Generate trend of vulnerabilities over time
      */
-    private fun generateAssetVulnerabilityTrend(data: Map<String, Any>): Map<String, Any> {
-        val vulns = data["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()
-        val trend = vulns.groupBy { 
+    private fun generateAssetVulnerabilityTrend(data: List<Map<String, Any>>): Map<String, Any> {
+        val trend = data.groupBy { 
             (it["discovered_at"] as? String)?.substring(0, 10) ?: "Unknown" 
         }.mapValues { it.value.size }
 
@@ -111,9 +106,8 @@ class VisualizationService(private val tenableClient: TenableClient) {
     /**
      * Generate list of top vulnerable assets
      */
-    private fun generateTopVulnerableAssets(data: Map<String, Any>): Map<String, Any> {
-        val vulns = data["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()
-        val assetVulns = vulns.groupBy { it["asset_name"] as? String ?: "Unknown" }
+    private fun generateTopVulnerableAssets(data: List<Map<String, Any>>): Map<String, Any> {
+        val assetVulns = data.groupBy { it["asset_name"] as? String ?: "Unknown" }
             .mapValues { it.value.size }
             .toList()
             .sortedByDescending { it.second }
@@ -132,9 +126,8 @@ class VisualizationService(private val tenableClient: TenableClient) {
     /**
      * Generate trend of vulnerabilities by severity over time
      */
-    private fun generateSeverityTrend(data: Map<String, Any>): Map<String, Any> {
-        val vulns = data["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()
-        val severityTrend = vulns.groupBy { 
+    private fun generateSeverityTrend(data: List<Map<String, Any>>): Map<String, Any> {
+        val severityTrend = data.groupBy { 
             Triple(
                 (it["discovered_at"] as? String)?.substring(0, 10) ?: "Unknown",
                 it["severity"] as? String ?: "Unknown",
@@ -167,9 +160,8 @@ class VisualizationService(private val tenableClient: TenableClient) {
     /**
      * Generate vulnerability distribution by category
      */
-    private fun generateVulnerabilityByCategory(data: Map<String, Any>): Map<String, Any> {
-        val vulns = data["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()
-        val categoryDistribution = vulns.groupBy { it["category"] as? String ?: "Unknown" }
+    private fun generateVulnerabilityByCategory(data: List<Map<String, Any>>): Map<String, Any> {
+        val categoryDistribution = data.groupBy { it["category"] as? String ?: "Unknown" }
             .mapValues { it.value.size }
             .toList()
             .sortedByDescending { it.second }
@@ -188,9 +180,8 @@ class VisualizationService(private val tenableClient: TenableClient) {
     /**
      * Generate asset risk score distribution
      */
-    private fun generateAssetRiskScore(data: Map<String, Any>): Map<String, Any> {
-        val assets = data["assets"] as? List<Map<String, Any>> ?: emptyList()
-        val riskScores = assets.map { it["risk_score"] as? Double ?: 0.0 }
+    private fun generateAssetRiskScore(data: List<Map<String, Any>>): Map<String, Any> {
+        val riskScores = data.map { it["risk_score"] as? Double ?: 0.0 }
         
         val ranges = listOf(
             "0-20" to 0,
@@ -223,8 +214,7 @@ class VisualizationService(private val tenableClient: TenableClient) {
     /**
      * Generate vulnerability age distribution
      */
-    private fun generateVulnerabilityAgeDistribution(data: Map<String, Any>): Map<String, Any> {
-        val vulns = data["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()
+    private fun generateVulnerabilityAgeDistribution(data: List<Map<String, Any>>): Map<String, Any> {
         val now = LocalDateTime.now()
         
         val ageRanges = listOf(
@@ -235,7 +225,7 @@ class VisualizationService(private val tenableClient: TenableClient) {
             ">180 days" to 0
         ).toMutableList()
 
-        vulns.forEach { vuln ->
+        data.forEach { vuln ->
             val discoveredAt = (vuln["discovered_at"] as? String)?.let {
                 LocalDateTime.parse(it, DateTimeFormatter.ISO_DATE_TIME)
             } ?: now
@@ -264,11 +254,10 @@ class VisualizationService(private val tenableClient: TenableClient) {
     /**
      * Generate remediation progress visualization
      */
-    private fun generateRemediationProgress(data: Map<String, Any>): Map<String, Any> {
-        val vulns = data["vulnerabilities"] as? List<Map<String, Any>> ?: emptyList()
-        val total = vulns.size
-        val fixed = vulns.count { it["status"] == "fixed" }
-        val inProgress = vulns.count { it["status"] == "in_progress" }
+    private fun generateRemediationProgress(data: List<Map<String, Any>>): Map<String, Any> {
+        val total = data.size
+        val fixed = data.count { it["status"] == "fixed" }
+        val inProgress = data.count { it["status"] == "in_progress" }
         val open = total - fixed - inProgress
 
         return mapOf(

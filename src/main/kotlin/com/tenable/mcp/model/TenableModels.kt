@@ -346,7 +346,8 @@ data class ConversationContext(
 
 data class Message(
     val role: String,
-    val content: String
+    val content: String,
+    val timestamp: LocalDateTime = LocalDateTime.now()
 )
 
 data class Intent(
@@ -377,4 +378,16 @@ enum class SubAction {
     DOWNLOAD,   // Download data
     LAUNCH,     // Launch a scan
     STATUS      // Get status
-} 
+}
+
+data class AskRequest(
+    val query: String,
+    val context: ConversationContext? = null
+)
+
+data class AskResponse(
+    val rawResponse: Map<String, Any>,
+    val summary: String,
+    val action: String? = null,
+    val filters: Map<String, Any>? = null
+) 

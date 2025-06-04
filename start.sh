@@ -5,10 +5,20 @@ check_api_keys() {
     local profile=$1
     local access_key_var="TENABLE_ACCESS_KEY"
     local secret_key_var="TENABLE_SECRET_KEY"
+    local url_var="TENABLE_API_URL"
     
     if [ "$profile" = "tenabledev" ]; then
         access_key_var="TENABLE_DEV_ACCESS_KEY"
         secret_key_var="TENABLE_DEV_SECRET_KEY"
+    fi
+
+    # Check if API URL is set
+    if [ -z "${!url_var}" ]; then
+        echo "API URL not found for $profile environment."
+        read -p "Enter API URL (default: https://cloud.tenable.com): " api_url
+        api_url=${api_url:-https://cloud.tenable.com}
+        export "$url_var"="$api_url"
+        echo "$url_var=$api_url" >> .env
     fi
 
     # Check if keys are set

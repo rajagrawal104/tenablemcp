@@ -12,6 +12,7 @@ import com.tenable.mcp.model.Action
 import com.tenable.mcp.model.Severity
 import com.tenable.mcp.model.TimeRange
 import com.tenable.mcp.model.SubAction
+import java.time.format.DateTimeFormatter
 
 // Data class representing the extracted intent from a user prompt
 data class Intent(
@@ -48,26 +49,27 @@ enum class SubAction {
 @Service
 class IntentClassifier {
     private val actionPatterns = mapOf(
-        "list" to listOf(
-            "show", "list", "display", "get", "find", "search", "query",
-            "what are", "what is", "tell me about", "give me"
-        ),
-        "export" to listOf(
-            "export", "download", "save", "get csv", "get excel",
-            "download as", "save as", "export as"
-        ),
-        "scan" to listOf(
-            "scan", "run scan", "start scan", "initiate scan",
-            "perform scan", "execute scan", "launch scan"
-        )
+        "list" to listOf("show", "list", "display", "get", "find", "search", "all"),
+        "export" to listOf("export", "download", "save", "get csv", "get report"),
+        "start" to listOf("start", "run", "launch", "initiate", "begin")
     )
 
-    private val scanStatusPatterns = mapOf(
-        "completed" to listOf("completed", "finished", "done", "successful"),
-        "running" to listOf("running", "in progress", "active", "ongoing"),
-        "failed" to listOf("failed", "error", "unsuccessful", "stopped"),
-        "scheduled" to listOf("scheduled", "planned", "queued", "pending")
+    private val severityPatterns = mapOf(
+        "critical" to listOf("critical", "severe", "high risk"),
+        "high" to listOf("high", "serious"),
+        "medium" to listOf("medium", "moderate"),
+        "low" to listOf("low", "minor"),
+        "info" to listOf("info", "information", "informational")
     )
+
+    private val timeRangePatterns = mapOf(
+        "last_24h" to listOf("last 24 hours", "past day", "last day", "24 hours"),
+        "last_7d" to listOf("last 7 days", "past week", "last week", "7 days"),
+        "last_30d" to listOf("last 30 days", "past month", "last month", "30 days"),
+        "last_90d" to listOf("last 90 days", "past quarter", "last quarter", "90 days")
+    )
+
+    private val scanPatterns = listOf("scan", "scans", "scanning")
 
     /**
      * Analyze a user prompt to determine their intent
@@ -82,18 +84,29 @@ class IntentClassifier {
         val action = determineAction(lowerPrompt, context)
         
         // Determine severity if applicable
-        val severity = determineSeverity(lowerPrompt, context)
+        val severity = if (action in listOf(Action.LIST_VULNERABILITIES, Action.EXPORT_VULNERABILITIES)) {
+            determineSeverity(lowerPrompt, context)
+        } else null
         
         // Determine time range
         val timeRange = determineTimeRange(lowerPrompt, context)
         
+        // Extract CVE ID if present
+        val cveId = extractCveId(lowerPrompt)
+        
+        // Extract asset ID if present
+        val assetId = extractAssetId(lowerPrompt)
+        
+        // Extract scan ID if present
+        val scanId = extractScanId(lowerPrompt)
+
         return Intent(
             action = action,
             severity = severity,
             timeRange = timeRange,
-            cveId = determineCveId(prompt),
-            assetId = determineAssetId(prompt),
-            scanStatus = determineScanStatus(prompt)
+            cveId = cveId,
+            assetId = assetId,
+            scanId = scanId
         )
     }
 
@@ -104,70 +117,43 @@ class IntentClassifier {
      * @return The determined Action
      */
     private fun determineAction(prompt: String, context: ConversationContext?): Action {
-        val lowerPrompt = prompt.lowercase()
-        
-        // Check for export-related patterns first
-        if (lowerPrompt.contains(Regex("(export|download|save|get csv|get excel|download as|save as|export as|csv)"))) {
-            return if (lowerPrompt.contains(Regex("(asset|host|server|machine)"))) {
+        // Check for scan-related keywords
+        if (scanPatterns.any { prompt.contains(it) }) {
+            return when {
+                actionPatterns["start"]?.any { prompt.contains(it) } == true -> Action.START_SCAN
+                actionPatterns["export"]?.any { prompt.contains(it) } == true -> Action.EXPORT_SCANS
+                else -> Action.LIST_SCANS
+            }
+        }
+
+        // Check for export intent
+        if (actionPatterns["export"]?.any { prompt.contains(it) } == true) {
+            return if (prompt.contains("asset") || prompt.contains("host")) {
                 Action.EXPORT_ASSETS
-            } else if (lowerPrompt.contains(Regex("(scan|scanning)"))) {
-                Action.EXPORT_SCANS
             } else {
                 Action.EXPORT_VULNERABILITIES
             }
         }
 
-        // Check for scan-related patterns
-        if (lowerPrompt.contains(Regex("(scan|run scan|start scan|initiate scan|perform scan|execute scan|launch scan)"))) {
-            return Action.START_SCAN
-        }
-        
-        // Asset-related patterns
-        if (lowerPrompt.contains(Regex("(asset|host|server|machine)"))) {
-            return Action.LIST_ASSETS
-        }
-
-        // Scan-related patterns - expanded to catch more variations
-        if (lowerPrompt.contains(Regex("(scan|scan list|scan history|scan schedule|scheduled scan|historical scan|past scan|previous scan|recent scan|last scan|all scan|scan status|scan result|scan report|show.*scan|list.*scan|get.*scan|display.*scan|view.*scan)"))) {
-            return Action.LIST_SCANS
-        }
-
-        // Check context for previous action
-        context?.currentContext?.get("lastAction")?.let { lastAction ->
-            if (lastAction is String) {
-                return try {
-                    Action.valueOf(lastAction.uppercase())
-                } catch (e: IllegalArgumentException) {
-                    Action.LIST_VULNERABILITIES
-                }
+        // Check for list intent - including "show all" cases
+        if (actionPatterns["list"]?.any { prompt.contains(it) } == true || prompt.contains("all")) {
+            return if (prompt.contains("asset") || prompt.contains("host")) {
+                Action.LIST_ASSETS
+            } else {
+                Action.LIST_VULNERABILITIES
             }
         }
 
-        // If no specific pattern is matched, check for vulnerability-related keywords
-        if (lowerPrompt.contains(Regex("(vulnerability|vuln|security issue|security risk|security problem)"))) {
-            return Action.LIST_VULNERABILITIES
-        }
-
-        // If still no match, check if the prompt is a follow-up question
-        if (context?.history?.isNotEmpty() == true) {
-            val lastMessage = context.history.last()
-            if (lastMessage.role == "assistant") {
-                // If the last message was about vulnerabilities, continue with vulnerabilities
-                if (lastMessage.content.contains(Regex("(vulnerability|vuln)"))) {
-                    return Action.LIST_VULNERABILITIES
-                }
-                // If the last message was about assets, continue with assets
-                if (lastMessage.content.contains(Regex("(asset|host|server)"))) {
-                    return Action.LIST_ASSETS
-                }
-                // If the last message was about scans, continue with scans
-                if (lastMessage.content.contains(Regex("(scan|scanning)"))) {
-                    return Action.LIST_SCANS
-                }
+        // Use context if available
+        context?.let {
+            return when {
+                it.currentContext["lastAction"] == "scan" -> Action.LIST_SCANS
+                it.currentContext["lastAction"] == "asset" -> Action.LIST_ASSETS
+                else -> Action.LIST_VULNERABILITIES
             }
         }
 
-        // Default to listing vulnerabilities only if no other context is available
+        // Default to listing vulnerabilities
         return Action.LIST_VULNERABILITIES
     }
 
@@ -177,31 +163,25 @@ class IntentClassifier {
      * @param context Optional conversation context
      * @return The determined Severity, or null if not specified
      */
-    private fun determineSeverity(prompt: String, context: ConversationContext? = null): Severity? {
-        val lowerPrompt = prompt.lowercase()
-
-        // Check for explicit severity mentions
-        when {
-            lowerPrompt.contains(Regex("(critical|severe|urgent)")) -> return Severity.CRITICAL
-            lowerPrompt.contains(Regex("(high|important)")) -> return Severity.HIGH
-            lowerPrompt.contains(Regex("(medium|moderate)")) -> return Severity.MEDIUM
-            lowerPrompt.contains(Regex("(low|minor)")) -> return Severity.LOW
-        }
-
-        // If we have context and the prompt is about filtering, check previous severity
-        context?.currentContext?.get("filters")?.let { filters ->
-            if (filters is Map<*, *>) {
-                val severity = filters["severity"] as? String
-                if (severity != null) {
-                    return try {
-                        Severity.valueOf(severity.uppercase())
-                    } catch (e: IllegalArgumentException) {
-                        null
-                    }
-                }
+    private fun determineSeverity(prompt: String, context: ConversationContext?): Severity? {
+        // Check query for severity keywords
+        severityPatterns.forEach { (severity, patterns) ->
+            if (patterns.any { prompt.contains(it) }) {
+                return Severity.valueOf(severity.uppercase())
             }
         }
 
+        // Use context if available
+        context?.let {
+            val lastSeverity = it.currentContext["lastSeverity"]
+            if (lastSeverity is String) {
+                return try {
+                    Severity.valueOf(lastSeverity.uppercase())
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        }
         return null
     }
 
@@ -211,79 +191,50 @@ class IntentClassifier {
      * @param context Optional conversation context
      * @return The determined TimeRange, or null if not specified
      */
-    private fun determineTimeRange(prompt: String, context: ConversationContext? = null): TimeRange? {
-        val lowerPrompt = prompt.lowercase()
-
-        // Check for explicit time mentions
-        val now = LocalDateTime.now()
-        when {
-            lowerPrompt.contains(Regex("(last|past|previous)\\s+(\\d+)\\s+(day|week|month|year)")) -> {
-                val matcher = Regex("(\\d+)\\s+(day|week|month|year)").find(lowerPrompt)
-                if (matcher != null) {
-                    val (amount, unit) = matcher.destructured
-                    val duration = when (unit) {
-                        "day" -> Duration.ofDays(amount.toLong())
-                        "week" -> Duration.ofDays(amount.toLong() * 7)
-                        "month" -> Duration.ofDays(amount.toLong() * 30)
-                        "year" -> Duration.ofDays(amount.toLong() * 365)
-                        else -> return null
-                    }
-                    return TimeRange(now.minus(duration), now)
+    private fun determineTimeRange(prompt: String, context: ConversationContext?): TimeRange? {
+        // Check query for time range keywords
+        timeRangePatterns.forEach { (range, patterns) ->
+            if (patterns.any { prompt.contains(it) }) {
+                val end = LocalDateTime.now()
+                val start = when (range) {
+                    "last_24h" -> end.minusHours(24)
+                    "last_7d" -> end.minusDays(7)
+                    "last_30d" -> end.minusDays(30)
+                    "last_90d" -> end.minusDays(90)
+                    else -> end.minusDays(30) // Default to last 30 days
                 }
-            }
-            lowerPrompt.contains(Regex("(today|yesterday|this week|this month|this year)")) -> {
-                return when {
-                    lowerPrompt.contains("today") -> TimeRange(now.truncatedTo(ChronoUnit.DAYS), now)
-                    lowerPrompt.contains("yesterday") -> {
-                        val yesterday = now.minusDays(1)
-                        TimeRange(yesterday.truncatedTo(ChronoUnit.DAYS), yesterday.plusDays(1).truncatedTo(ChronoUnit.DAYS))
-                    }
-                    lowerPrompt.contains("this week") -> {
-                        val weekStart = now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                        TimeRange(weekStart.truncatedTo(ChronoUnit.DAYS), now)
-                    }
-                    lowerPrompt.contains("this month") -> {
-                        val monthStart = now.with(TemporalAdjusters.firstDayOfMonth())
-                        TimeRange(monthStart.truncatedTo(ChronoUnit.DAYS), now)
-                    }
-                    lowerPrompt.contains("this year") -> {
-                        val yearStart = now.with(TemporalAdjusters.firstDayOfYear())
-                        TimeRange(yearStart.truncatedTo(ChronoUnit.DAYS), now)
-                    }
-                    else -> null
-                }
+                return TimeRange(start, end)
             }
         }
 
-        // If we have context and the prompt is about filtering, check previous time range
-        context?.currentContext?.get("filters")?.let { filters ->
-            if (filters is Map<*, *>) {
-                val timeRange = filters["timeRange"] as? String
-                if (timeRange != null && timeRange != "all") {
-                    val (start, end) = timeRange.split(" to ")
-                    return TimeRange(
-                        LocalDateTime.parse(start),
-                        LocalDateTime.parse(end)
-                    )
+        // Use context if available
+        context?.let {
+            val lastTimeRange = it.currentContext["lastTimeRange"]
+            if (lastTimeRange is String && lastTimeRange.contains(" to ")) {
+                val formatter = DateTimeFormatter.ISO_DATE_TIME
+                val parts = lastTimeRange.split(" to ")
+                if (parts.size == 2) {
+                    val start = LocalDateTime.parse(parts[0], formatter)
+                    val end = LocalDateTime.parse(parts[1], formatter)
+                    return TimeRange(start, end)
                 }
             }
         }
-
         return null
     }
 
-    private fun determineCveId(prompt: String): String? {
-        return Regex("CVE-\\d{4}-\\d+").find(prompt)?.value
+    private fun extractCveId(prompt: String): String? {
+        val cvePattern = "CVE-\\d{4}-\\d{4,7}".toRegex()
+        return cvePattern.find(prompt)?.value
     }
 
-    private fun determineAssetId(prompt: String): String? {
-        return Regex("asset-\\d+").find(prompt)?.value
+    private fun extractAssetId(prompt: String): String? {
+        val assetPattern = "asset[_-]?id[=:]?\\s*([a-zA-Z0-9-]+)".toRegex()
+        return assetPattern.find(prompt)?.groupValues?.get(1)
     }
 
-    private fun determineScanStatus(prompt: String): String? {
-        val lowerPrompt = prompt.lowercase()
-        return scanStatusPatterns.entries.firstOrNull { (_, patterns) ->
-            patterns.any { it in lowerPrompt }
-        }?.key
+    private fun extractScanId(prompt: String): String? {
+        val scanPattern = "scan[_-]?id[=:]?\\s*([a-zA-Z0-9-]+)".toRegex()
+        return scanPattern.find(prompt)?.groupValues?.get(1)
     }
 } 

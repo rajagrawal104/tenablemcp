@@ -140,7 +140,7 @@
 
         // Load current configuration
         function loadConfig() {
-            fetch('/config')
+            fetch('/api/config')
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
@@ -194,7 +194,7 @@
             if (accessKey) configData.accessKey = accessKey;
             if (secretKey) configData.secretKey = secretKey;
 
-            fetch('/config', {
+            fetch('/api/config', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -235,7 +235,7 @@
             statusDetails.textContent = 'Please wait while we verify your credentials...';
             statusDiv.classList.remove('hidden');
 
-            fetch('/config/test-connection', {
+            fetch('/api/config/test-connection', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -343,7 +343,7 @@
             showLoadingState();
 
             try {
-                const response = await fetch('/ask', {
+                const response = await fetch('/api/ask', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -505,10 +505,30 @@
                         const downloadButton = document.createElement('button');
                         downloadButton.className = 'px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors';
                         downloadButton.innerHTML = '<i class="fas fa-download mr-2"></i>Download CSV';
-                        downloadButton.onclick = () => {
+                        downloadButton.onclick = async () => {
                             try {
                                 console.log('Starting CSV export...');
-                                exportToCSV(displayData);
+                                const response = await fetch('/visualizations/export/vulnerabilities', {
+                                    method: 'GET',
+                                    headers: {
+                                        'Accept': 'text/csv'
+                                    }
+                                });
+
+                                if (!response.ok) {
+                                    throw new Error(`HTTP error! status: ${response.status}`);
+                                }
+
+                                const blob = await response.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const link = document.createElement('a');
+                                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                                link.href = url;
+                                link.download = `tenable_export_${timestamp}.csv`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                window.URL.revokeObjectURL(url);
                             } catch (error) {
                                 console.error('Error in CSV export:', error);
                                 alert('Error exporting to CSV. Please check the console for details.');
@@ -809,127 +829,6 @@
             }
 
             console.log('Table created successfully'); // Debug log
-        }
-
-        function exportToCSV(data) {
-            console.log('Starting CSV export with data:', data);
-
-            if (!data || !Array.isArray(data) || data.length === 0) {
-                console.error('Invalid data for CSV export:', data);
-                return;
-            }
-
-            try {
-                // Debug log the first item
-                console.log('First item structure:', data[0]);
-
-                // Flatten nested objects and arrays
-                const flattenedData = data.map((item, index) => {
-                    console.log(`Processing item ${index}:`, item);
-                    const flattened = {};
-                    
-                    const flatten = (obj, prefix = '') => {
-                        if (!obj || typeof obj !== 'object') {
-                            return;
-                        }
-
-                        for (const key in obj) {
-                            if (obj.hasOwnProperty(key)) {
-                                const value = obj[key];
-                                const newKey = prefix ? `${prefix}_${key}` : key;
-                                
-                                if (value === null || value === undefined) {
-                                    flattened[newKey] = '';
-                                } else if (typeof value === 'object') {
-                                    if (Array.isArray(value)) {
-                                        // Handle arrays
-                                        if (value.length > 0) {
-                                            if (typeof value[0] === 'object') {
-                                                // If array contains objects, flatten each object
-                                                value.forEach((subItem, subIndex) => {
-                                                    flatten(subItem, `${newKey}_${subIndex}`);
-                                                });
-                                            } else {
-                                                // If array contains simple values, join them
-                                                flattened[newKey] = value.join('; ');
-                                            }
-                                        } else {
-                                            flattened[newKey] = '';
-                                        }
-                                    } else {
-                                        // Recursively flatten nested objects
-                                        flatten(value, newKey);
-                                    }
-                                } else {
-                                    // Handle primitive values
-                                    flattened[newKey] = value;
-                                }
-                            }
-                        }
-                    };
-
-                    flatten(item);
-                    console.log(`Flattened item ${index}:`, flattened);
-                    return flattened;
-                });
-
-                console.log('Flattened data:', flattenedData);
-
-                // Get all unique headers
-                const headers = new Set();
-                flattenedData.forEach(item => {
-                    Object.keys(item).forEach(key => headers.add(key));
-                });
-
-                // Convert headers to array and sort them
-                const headerArray = Array.from(headers).sort();
-                console.log('CSV Headers:', headerArray);
-
-                // Create CSV content
-                const csvContent = [
-                    headerArray.join(','),
-                    ...flattenedData.map(row => 
-                        headerArray.map(header => {
-                            const value = row[header];
-                            // Handle special characters and formatting
-                            if (value === null || value === undefined) {
-                                return '""';
-                            }
-                            const stringValue = String(value);
-                            // Escape quotes and wrap in quotes if contains special characters
-                            const needsQuotes = stringValue.includes(',') || 
-                                              stringValue.includes('"') || 
-                                              stringValue.includes('\n') ||
-                                              stringValue.includes(';');
-                            return needsQuotes 
-                                ? `"${stringValue.replace(/"/g, '""')}"`
-                                : stringValue;
-                        }).join(',')
-                    )
-                ].join('\n');
-
-                console.log('CSV Content preview:', csvContent.substring(0, 500) + '...');
-
-                // Create and trigger download
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                link.href = URL.createObjectURL(blob);
-                link.download = `tenable_export_${timestamp}.csv`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-
-                console.log('CSV export completed successfully');
-            } catch (error) {
-                console.error('Error exporting to CSV:', error);
-                console.error('Error details:', {
-                    message: error.message,
-                    stack: error.stack,
-                    data: data
-                });
-                alert('Error exporting to CSV. Please check the console for details.');
-            }
         }
 
         // Handle Enter key in input

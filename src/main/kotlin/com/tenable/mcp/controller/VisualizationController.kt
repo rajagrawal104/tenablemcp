@@ -2,6 +2,7 @@ package com.tenable.mcp.controller
 
 import com.tenable.mcp.model.TimeRange
 import com.tenable.mcp.service.VisualizationService
+import com.tenable.mcp.service.ExportService
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -11,7 +12,10 @@ import java.time.format.DateTimeFormatter
 
 @RestController
 @RequestMapping("/visualizations")
-class VisualizationController(private val visualizationService: VisualizationService) {
+class VisualizationController(
+    private val visualizationService: VisualizationService,
+    private val exportService: ExportService
+) {
 
     /**
      * Get a comprehensive report with multiple visualizations
@@ -46,7 +50,7 @@ class VisualizationController(private val visualizationService: VisualizationSer
             )
         } else null
 
-        val csvData = visualizationService.exportVulnerabilitiesCsv(timeRange)
+        val csvData = exportService.exportVulnerabilitiesCsv(timeRange)
         
         return ResponseEntity.ok()
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=vulnerabilities.csv")
