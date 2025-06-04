@@ -58,13 +58,24 @@
                 </div>
             </div>
 
+            <!-- Conversation Section -->
+            <div class="bg-white shadow rounded-lg p-6 mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">Conversation</h2>
+                    <button id="clearConversation" class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <i class="fas fa-trash mr-2"></i>Clear
+                    </button>
+                </div>
+                <div id="conversationContainer" class="space-y-4 max-h-96 overflow-y-auto mb-4 p-4 bg-gray-50 rounded-lg"></div>
+            </div>
+
             <!-- Query Section -->
             <div class="bg-white shadow rounded-lg p-6">
                 <h2 class="text-xl font-semibold mb-4">Ask Tenable</h2>
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Your Question</label>
-                        <textarea id="query" rows="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Ask a question or continue the conversation..."></textarea>
+                        <textarea id="queryInput" rows="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Ask a question or continue the conversation..."></textarea>
                     </div>
                     <div>
                         <button onclick="askQuestion()" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
@@ -76,31 +87,17 @@
                 <!-- Response Section -->
                 <div class="mt-6">
                     <h3 class="text-lg font-medium text-gray-900">Response</h3>
-                    <div id="response" class="mt-2 space-y-4">
-                        <!-- Summary Section -->
-                        <div id="summary" class="p-4 bg-gray-50 rounded-md">
-                            <p class="text-gray-500">Your response will appear here...</p>
-                        </div>
-                        
+                    <div id="responseContainer" class="mt-2 space-y-4">
                         <!-- Data Table Section -->
-                        <div id="dataTable" class="hidden overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr id="tableHeader"></tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-200" id="tableBody"></tbody>
-                            </table>
-                        </div>
+                        <div id="dataTable" class="overflow-x-auto"></div>
 
                         <!-- Visualization Section -->
-                        <div id="visualization" class="hidden">
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div class="bg-white p-4 rounded-lg shadow">
-                                    <canvas id="trendChart"></canvas>
-                                </div>
-                                <div class="bg-white p-4 rounded-lg shadow">
-                                    <canvas id="severityChart"></canvas>
-                                </div>
+                        <div id="visualization" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-white p-4 rounded-lg shadow">
+                                <canvas id="trendChart"></canvas>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow">
+                                <canvas id="severityChart"></canvas>
                             </div>
                         </div>
                     </div>
@@ -123,57 +120,11 @@
         // Load current configuration when page loads
         window.onload = function() {
             loadConfig();
-            initializeConversation();
         };
-
-        // Initialize conversation UI
-        function initializeConversation() {
-            const conversationDiv = document.createElement('div');
-            conversationDiv.id = 'conversation';
-            conversationDiv.className = 'mt-6 space-y-4';
-            
-            // Add conversation container before the query section
-            const querySection = document.querySelector('.bg-white.shadow.rounded-lg.p-6');
-            querySection.parentNode.insertBefore(conversationDiv, querySection);
-
-            // Update the query section to be more conversational
-            const queryInput = document.getElementById('query');
-            queryInput.placeholder = "Ask a question or continue the conversation...";
-            queryInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    askQuestion();
-                }
-            });
-        }
-
-        // Add a message to the conversation
-        function addMessage(content, type = 'user') {
-            const conversationDiv = document.getElementById('conversation');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `flex ${type === 'user' ? 'justify-end' : 'justify-start'}`;
-            
-            const messageBubble = document.createElement('div');
-            messageBubble.className = `max-w-3xl rounded-lg px-4 py-2 ${
-                type === 'user' 
-                    ? 'bg-indigo-600 text-white' 
-                    : 'bg-gray-100 text-gray-900'
-            }`;
-            
-            if (type === 'assistant') {
-                messageBubble.innerHTML = `<div class="prose">${content}</div>`;
-            } else {
-                messageBubble.textContent = content;
-            }
-            
-            messageDiv.appendChild(messageBubble);
-            conversationDiv.appendChild(messageDiv);
-            conversationDiv.scrollTop = conversationDiv.scrollHeight;
-        }
 
         // Load current configuration
         function loadConfig() {
-            fetch('/api/config')
+            fetch('/config')
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
@@ -194,7 +145,7 @@
             const secretKey = document.getElementById('secretKey').value;
             const baseUrl = document.getElementById('baseUrl').value;
 
-            fetch('/api/config', {
+            fetch('/config', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -234,7 +185,7 @@
             statusDetails.textContent = 'Please wait while we verify your credentials...';
             statusDiv.classList.remove('hidden');
 
-            fetch('/api/config/test-connection', {
+            fetch('/config/test-connection', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -263,7 +214,118 @@
             });
         }
 
-        // Function to create data visualizations
+        // Add a message to the conversation
+        function addMessageToConversation(role, content) {
+            const conversationContainer = document.getElementById('conversationContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+            
+            const messageBubble = document.createElement('div');
+            messageBubble.className = `max-w-3xl rounded-lg px-4 py-2 ${
+                role === 'user' 
+                    ? 'bg-indigo-600 text-white' 
+                    : 'bg-gray-100 text-gray-900'
+            }`;
+            
+            if (role === 'assistant') {
+                messageBubble.innerHTML = `<div class="prose">${content}</div>`;
+            } else {
+                messageBubble.textContent = content;
+            }
+            
+            messageDiv.appendChild(messageBubble);
+            conversationContainer.appendChild(messageDiv);
+            conversationContainer.scrollTop = conversationContainer.scrollHeight;
+
+            // Add to history
+            conversationHistory.push({ role, content });
+        }
+
+        // Function to ask a question
+        async function askQuestion() {
+            const queryInput = document.getElementById('queryInput');
+            const query = queryInput.value.trim();
+            if (!query) return;
+
+            // Add user message to conversation
+            addMessageToConversation('user', query);
+            queryInput.value = '';
+
+            // Show loading state
+            const responseContainer = document.getElementById('responseContainer');
+            responseContainer.innerHTML = '<div class="text-gray-500">Processing your request...</div>';
+
+            try {
+                const response = await fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt: query,
+                        context: {
+                            messages: conversationHistory,
+                            currentContext: currentContext
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Update context
+                currentContext = {
+                    lastAction: data.action,
+                    filters: data.filters || {}
+                };
+
+                // Add assistant message to conversation
+                addMessageToConversation('assistant', data.summary);
+
+                // Clear previous visualizations
+                clearVisualizations();
+
+                // Handle the response based on the action
+                if (data.rawResponse) {
+                    if (data.action === 'list_vulnerabilities' || data.action === 'list_assets') {
+                        createDataTable(data.rawResponse);
+                        createVisualizations(data.rawResponse);
+                    }
+                }
+
+                // Show download button if CSV was requested
+                if (query.toLowerCase().includes('csv')) {
+                    const downloadButton = document.createElement('button');
+                    downloadButton.className = 'mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600';
+                    downloadButton.textContent = 'Download CSV';
+                    downloadButton.onclick = () => exportToCSV(data.rawResponse);
+                    responseContainer.appendChild(downloadButton);
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                addMessageToConversation('assistant', `Error: ${error.message}`);
+            }
+        }
+
+        function clearVisualizations() {
+            // Destroy existing charts
+            if (severityChart instanceof Chart) {
+                severityChart.destroy();
+            }
+            if (trendChart instanceof Chart) {
+                trendChart.destroy();
+            }
+
+            // Clear containers
+            document.getElementById('severityChart').innerHTML = '';
+            document.getElementById('trendChart').innerHTML = '';
+            document.getElementById('dataTable').innerHTML = '';
+        }
+
         function createVisualizations(data) {
             if (!data || !Array.isArray(data)) return;
 
@@ -333,91 +395,6 @@
             });
         }
 
-        // Function to ask a question
-        async function askQuestion() {
-            const queryInput = document.getElementById('query');
-            const query = queryInput.value.trim();
-            if (!query) return;
-
-            // Add user message to conversation
-            addMessage(query, 'user');
-            queryInput.value = '';
-
-            // Show loading state
-            const responseContainer = document.getElementById('response');
-            responseContainer.innerHTML = '<div class="text-gray-500">Processing your request...</div>';
-
-            try {
-                const response = await fetch('/api/ask', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        prompt: query,
-                        context: {
-                            messages: conversationHistory,
-                            currentContext: currentContext
-                        }
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                
-                // Update context
-                currentContext = {
-                    lastAction: data.action,
-                    filters: data.filters || {}
-                };
-
-                // Add assistant message to conversation
-                addMessage(data.summary, 'assistant');
-
-                // Clear previous visualizations
-                clearVisualizations();
-
-                // Handle the response based on the action
-                if (data.rawResponse) {
-                    if (data.action === 'list_vulnerabilities' || data.action === 'list_assets') {
-                        createDataTable(data.rawResponse);
-                        createVisualizations(data.rawResponse);
-                    }
-                }
-
-                // Show download button if CSV was requested
-                if (query.toLowerCase().includes('csv')) {
-                    const downloadButton = document.createElement('button');
-                    downloadButton.className = 'mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600';
-                    downloadButton.textContent = 'Download CSV';
-                    downloadButton.onclick = () => exportToCSV(data.rawResponse);
-                    responseContainer.appendChild(downloadButton);
-                }
-
-            } catch (error) {
-                console.error('Error:', error);
-                addMessage(`Error: ${error.message}`, 'assistant');
-            }
-        }
-
-        function clearVisualizations() {
-            // Destroy existing charts
-            if (severityChart instanceof Chart) {
-                severityChart.destroy();
-            }
-            if (trendChart instanceof Chart) {
-                trendChart.destroy();
-            }
-
-            // Clear containers
-            document.getElementById('severityChart').innerHTML = '';
-            document.getElementById('trendChart').innerHTML = '';
-            document.getElementById('dataTable').innerHTML = '';
-        }
-
         function createDataTable(data) {
             if (!data || !Array.isArray(data) || data.length === 0) return;
 
@@ -478,8 +455,9 @@
         }
 
         // Handle Enter key in input
-        document.getElementById('query').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
+        document.getElementById('queryInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
                 askQuestion();
             }
         });
@@ -491,7 +469,7 @@
                 lastAction: null,
                 filters: {}
             };
-            document.getElementById('conversation').innerHTML = '';
+            document.getElementById('conversationContainer').innerHTML = '';
             clearVisualizations();
         });
     </script>
