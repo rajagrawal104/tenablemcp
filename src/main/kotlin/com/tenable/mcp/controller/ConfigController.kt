@@ -3,6 +3,9 @@ package com.tenable.mcp.controller
 import com.tenable.mcp.config.TenableConfig
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 
 @RestController
 @RequestMapping("/api/config")
@@ -38,5 +41,50 @@ class ConfigController(private val tenableConfig: TenableConfig) {
                 "hasSecretKey" to tenableConfig.secretKey.isNotEmpty()
             )
         ))
+    }
+
+    @PostMapping("/test-connection")
+    fun testConnection(): ResponseEntity<Map<String, Any>> {
+        return try {
+            val client = OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build()
+
+            val request = Request.Builder()
+                .url("${tenableConfig.baseUrl}/api/v2/users/me")
+                .addHeader("X-ApiKeys", "accessKey=${tenableConfig.accessKey}; secretKey=${tenableConfig.secretKey}")
+                .get()
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    ResponseEntity.ok(mapOf(
+                        "success" to true,
+                        "message" to "Successfully connected to Tenable.io",
+                        "status" to response.code,
+                        "details" to "Credentials are valid and connection is working"
+                    ))
+                } else {
+                    ResponseEntity.badRequest().body(mapOf(
+                        "success" to false,
+                        "message" to "Failed to connect to Tenable.io",
+                        "status" to response.code,
+                        "details" to when (response.code) {
+                            401 -> "Invalid credentials (Access Key or Secret Key)"
+                            403 -> "Insufficient permissions"
+                            404 -> "API endpoint not found"
+                            else -> "Connection failed with status ${response.code}"
+                        }
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            ResponseEntity.badRequest().body(mapOf(
+                "success" to false,
+                "message" to "Connection test failed",
+                "details" to e.message ?: "Unknown error occurred"
+            ))
+        }
     }
 } 
